@@ -1,10 +1,11 @@
 <template>
   <el-container class="layout-container">
     <!-- 顶部导航栏 -->
-    <el-header>
+    <el-header class="header">
       <nav class="nav-header">
         <!-- 左侧 Logo -->
         <router-link to="/" class="logo">
+          <el-icon class="logo-icon"><Shop /></el-icon>
           汽车商城
         </router-link>
 
@@ -16,49 +17,96 @@
             class="search-input"
             @keyup.enter="handleSearch"
           >
-            <template #append>
-              <el-button @click="handleSearch">
-                <el-icon><Search /></el-icon>
-              </el-button>
+            <template #prefix>
+              <el-icon><Search /></el-icon>
             </template>
           </el-input>
         </div>
 
         <!-- 右侧导航链接 -->
         <div class="nav-links">
-          <router-link to="/">首页</router-link>
-          <router-link to="/cart">
+          <router-link to="/" class="nav-link">
+            <el-icon><HomeFilled /></el-icon>
+            首页
+          </router-link>
+          <router-link to="/cart" class="nav-link">
             <el-badge :value="cartCount" :hidden="cartCount === 0">
+              <el-icon><ShoppingCart /></el-icon>
               购物车
             </el-badge>
           </router-link>
-          <!-- 根据登录状态显示不同的链接 -->
+          
+          <!-- 用户菜单 -->
           <template v-if="userStore.isLoggedIn">
-            <el-dropdown>
+            <el-dropdown trigger="click">
               <span class="user-menu">
-                {{ userStore.user?.username }}
+                <el-avatar 
+                  :size="32"
+                  :src="userStore.user?.avatar || '/images/default-avatar.png'"
+                />
+                <span class="username">{{ userStore.user?.username }}</span>
                 <el-icon><ArrowDown /></el-icon>
               </span>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item @click="logout">退出登录</el-dropdown-item>
+                  <el-dropdown-item>
+                    <el-icon><User /></el-icon>
+                    个人中心
+                  </el-dropdown-item>
+                  <el-dropdown-item>
+                    <el-icon><List /></el-icon>
+                    我的订单
+                  </el-dropdown-item>
+                  <el-dropdown-item divided @click="logout">
+                    <el-icon><SwitchButton /></el-icon>
+                    退出登录
+                  </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
           </template>
-          <router-link v-else to="/login">登录</router-link>
+          <router-link v-else to="/login" class="nav-link">
+            <el-icon><User /></el-icon>
+            登录
+          </router-link>
         </div>
       </nav>
     </el-header>
 
     <!-- 主要内容区域 -->
     <el-main>
-      <router-view></router-view>
+      <router-view v-slot="{ Component }">
+        <transition name="fade" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
     </el-main>
 
     <!-- 页脚 -->
-    <el-footer>
-      <p>© 2024 汽车商城 版权所有</p>
+    <el-footer class="footer">
+      <div class="footer-content">
+        <div class="footer-section">
+          <h3>关于我们</h3>
+          <p>专业的汽车交易平台</p>
+          <p>为您提供优质的购车体验</p>
+        </div>
+        <div class="footer-section">
+          <h3>联系方式</h3>
+          <p>电话：400-123-4567</p>
+          <p>邮箱：support@carmall.com</p>
+        </div>
+        <div class="footer-section">
+          <h3>关注我们</h3>
+          <div class="social-links">
+            <el-icon><Platform /></el-icon>
+            <el-icon><ChatDotRound /></el-icon>
+            <el-icon><Share /></el-icon>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>© 2024 汽车商城 版权所有</p>
+      </div>
     </el-footer>
   </el-container>
 </template>
@@ -67,7 +115,19 @@
 import { ref, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { Search, ArrowDown } from '@element-plus/icons-vue'
+import { 
+  Search, 
+  ArrowDown, 
+  HomeFilled,
+  ShoppingCart,
+  User,
+  List,
+  SwitchButton,
+  Platform,
+  ChatDotRound,
+  Share,
+  Shop
+} from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'
 
@@ -142,14 +202,25 @@ onMounted(() => {
 /* 布局容器 */
 .layout-container {
   min-height: 100vh;
+  background-color: #f5f7fa;
 }
 
 /* 顶部导航栏样式 */
+.header {
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
 .nav-header {
+  max-width: 1200px;
+  margin: 0 auto;
+  height: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 100%;
   padding: 0 20px;
 }
 
@@ -159,6 +230,18 @@ onMounted(() => {
   font-weight: bold;
   color: #409EFF;
   text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: color 0.3s;
+}
+
+.logo:hover {
+  color: #79bbff;
+}
+
+.logo-icon {
+  font-size: 28px;
 }
 
 /* 搜索栏样式 */
@@ -170,25 +253,37 @@ onMounted(() => {
 
 .search-input {
   width: 100%;
+  transition: all 0.3s;
+}
+
+.search-input:focus-within {
+  transform: translateY(-2px);
 }
 
 /* 导航链接样式 */
 .nav-links {
   display: flex;
-  gap: 20px;
+  gap: 24px;
   align-items: center;
 }
 
-.nav-links a {
+.nav-link {
   color: #606266;
   text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  transition: all 0.3s;
 }
 
-.nav-links a:hover {
+.nav-link:hover {
   color: #409EFF;
+  background: #ecf5ff;
 }
 
-.nav-links a.router-link-active {
+.nav-link.router-link-active {
   color: #409EFF;
   font-weight: bold;
 }
@@ -198,13 +293,81 @@ onMounted(() => {
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.3s;
+}
+
+.user-menu:hover {
+  background: #f5f7fa;
+}
+
+.username {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 页面切换动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
 /* 页脚样式 */
-.el-footer {
+.footer {
+  background: #2c3e50;
+  color: #fff;
+  padding: 40px 0 20px;
+}
+
+.footer-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 40px;
+  padding: 0 20px;
+}
+
+.footer-section h3 {
+  margin-bottom: 20px;
+  font-size: 18px;
+  color: #fff;
+}
+
+.footer-section p {
+  color: #b3c0d1;
+  line-height: 1.6;
+}
+
+.social-links {
+  display: flex;
+  gap: 20px;
+  font-size: 24px;
+}
+
+.social-links .el-icon {
+  cursor: pointer;
+  transition: color 0.3s;
+}
+
+.social-links .el-icon:hover {
+  color: #409EFF;
+}
+
+.footer-bottom {
   text-align: center;
-  color: #909399;
-  padding: 20px 0;
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  color: #b3c0d1;
 }
 </style> 

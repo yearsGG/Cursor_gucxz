@@ -1,70 +1,110 @@
 <template>
   <div class="home">
     <!-- 轮播图部分 -->
-    <div class="banner">
-      <el-carousel height="400px">
+    <div class="banner-section">
+      <el-carousel height="500px" :interval="4000" type="card">
         <el-carousel-item v-for="banner in banners" :key="banner.id">
-          <img :src="banner.image_url" :alt="banner.title">
+          <div class="banner-content">
+            <img :src="banner.image_url" :alt="banner.title">
+            <div class="banner-info">
+              <h2>{{ banner.title }}</h2>
+              <p>{{ banner.description }}</p>
+              <el-button type="primary" size="large" @click="goToCategory(banner.link)">
+                了解更多
+              </el-button>
+            </div>
+          </div>
         </el-carousel-item>
       </el-carousel>
     </div>
 
+    <!-- 品牌展示 -->
+    <div class="brand-section">
+      <h2 class="section-title">热门品牌</h2>
+      <div class="brand-list">
+        <div v-for="brand in brands" :key="brand.id" class="brand-item" @click="filterByBrand(brand.name)">
+          <img :src="brand.logo" :alt="brand.name">
+          <span>{{ brand.name }}</span>
+        </div>
+      </div>
+    </div>
+
     <!-- 分类导航 -->
     <div class="category-nav">
-      <el-menu mode="horizontal" :default-active="activeCategory">
+      <el-menu 
+        mode="horizontal" 
+        :default-active="activeCategory"
+        class="category-menu"
+      >
         <el-menu-item 
           v-for="category in categories" 
           :key="category.value"
           :index="category.value"
           @click="filterByCategory(category.value)"
         >
-          {{ category.label }}
+          <el-icon>
+            <component :is="category.icon" />
+          </el-icon>
+          <span>{{ category.label }}</span>
         </el-menu-item>
       </el-menu>
     </div>
 
     <!-- 商品展示网格 -->
-    <div class="car-grid">
-      <el-card 
-        v-for="car in cars" 
-        :key="car.id" 
-        class="car-card"
-        @click="goToDetail(car.id)"
-      >
-        <!-- 商品图片 -->
-        <img 
-          :src="car.images ? car.images.split(',')[0] : '/images/default-car.jpg'" 
-          class="car-image"
-          :alt="car.model"
+    <div class="car-section">
+      <h2 class="section-title">热门车型</h2>
+      <div class="car-grid">
+        <el-card 
+          v-for="car in cars" 
+          :key="car.id" 
+          class="car-card"
+          @click="goToDetail(car.id)"
         >
-        <!-- 商品信息 -->
-        <div class="car-info">
-          <h3>{{ car.brand }} {{ car.model }}</h3>
-          <p class="year-mileage">
-            {{ car.year }}年 | {{ car.mileage }}公里
-          </p>
-          <p class="price">¥{{ car.price?.toLocaleString() }}</p>
-          <el-button 
-            type="primary" 
-            @click.stop="addToCart(car)"
-          >
-            加入购物车
-          </el-button>
-        </div>
-      </el-card>
-    </div>
+          <div class="car-image-wrapper">
+            <img 
+              :src="getCarImage(car.images)"
+              class="car-image"
+              :alt="car.model"
+            >
+            <div class="car-tags">
+              <el-tag v-if="car.stock <= 3" type="danger">库存紧张</el-tag>
+              <el-tag v-if="car.category === 'electric'" type="success">新能源</el-tag>
+            </div>
+          </div>
+          <div class="car-info">
+            <h3>{{ car.brand }} {{ car.model }}</h3>
+            <p class="car-specs">
+              <span>{{ car.year }}年</span>
+              <span>{{ car.mileage }}公里</span>
+              <span>{{ car.color }}</span>
+            </p>
+            <div class="car-price">
+              <span class="price">¥{{ formatPrice(car.price) }}</span>
+              <el-button 
+                type="primary" 
+                @click.stop="addToCart(car)"
+                :loading="loading"
+              >
+                加入购物车
+              </el-button>
+            </div>
+          </div>
+        </el-card>
+      </div>
 
-    <!-- 分页控件 -->
-    <div class="pagination">
-      <el-pagination
-        v-model:current-page="currentPage"
-        v-model:page-size="pageSize"
-        :total="total"
-        :page-sizes="[12, 24, 36, 48]"
-        layout="total, sizes, prev, pager, next"
-        @size-change="handleSizeChange"
-        @current-change="handleCurrentChange"
-      />
+      <!-- 分页控件 -->
+      <div class="pagination">
+        <el-pagination
+          v-model:currentPage="currentPage"
+          v-model:pageSize="pageSize"
+          :total="total"
+          :page-sizes="[12, 24, 36, 48]"
+          layout="total, sizes, prev, pager, next"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+          background
+        />
+      </div>
     </div>
 
     <!-- 客服悬浮窗 -->
@@ -75,7 +115,7 @@
         trigger="click"
       >
         <template #reference>
-          <el-button type="primary" circle>
+          <el-button type="primary" circle class="service-button">
             <el-icon><Service /></el-icon>
           </el-button>
         </template>
@@ -95,9 +135,16 @@
 import { ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import axios from 'axios'
+import { 
+  Service,
+  Van,
+  Basketball,
+  Lightning,
+  List,
+  Location
+} from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { Service } from '@element-plus/icons-vue'
+import axios from 'axios'
 
 // 路由相关
 const router = useRouter()
@@ -105,10 +152,12 @@ const route = useRoute()
 
 // 状态管理
 const userStore = useUserStore()
+const loading = ref(false)
 
 // 数据响应式定义
 const banners = ref([])
 const cars = ref([])
+const brands = ref([])
 const activeCategory = ref('all')
 const currentPage = ref(1)
 const pageSize = ref(12)
@@ -116,12 +165,22 @@ const total = ref(0)
 
 // 分类选项定义
 const categories = [
-  { label: '全部', value: 'all' },
-  { label: 'SUV', value: 'suv' },
-  { label: '轿车', value: 'sedan' },
-  { label: '跑车', value: 'sports' },
-  { label: '新能源', value: 'electric' }
+  { label: '全部', value: 'all', icon: 'List' },
+  { label: 'SUV', value: 'suv', icon: 'Van' },
+  { label: '轿车', value: 'sedan', icon: 'Location' },
+  { label: '跑车', value: 'sports', icon: 'Basketball' },
+  { label: '新能源', value: 'electric', icon: 'Lightning' }
 ]
+
+// 格式化价格
+const formatPrice = (price) => {
+  return price?.toLocaleString() || '0'
+}
+
+// 获取车辆图片
+const getCarImage = (images) => {
+  return images ? images.split(',')[0] : '/images/default-car.jpg'
+}
 
 // 获取轮播图数据
 const fetchBanners = async () => {
@@ -130,6 +189,16 @@ const fetchBanners = async () => {
     banners.value = data
   } catch (error) {
     console.error('获取轮播图失败:', error)
+  }
+}
+
+// 获取品牌数据
+const fetchBrands = async () => {
+  try {
+    const { data } = await axios.get('/api/brands')
+    brands.value = data
+  } catch (error) {
+    console.error('获取品牌数据失败:', error)
   }
 }
 
@@ -158,6 +227,21 @@ const filterByCategory = (category) => {
   fetchCars()
 }
 
+// 品牌筛选
+const filterByBrand = (brand) => {
+  router.push({
+    path: '/',
+    query: { brand }
+  })
+}
+
+// 跳转到分类
+const goToCategory = (link) => {
+  if (link) {
+    router.push(link)
+  }
+}
+
 // 分页处理
 const handleSizeChange = (val) => {
   pageSize.value = val
@@ -171,14 +255,16 @@ const handleCurrentChange = (val) => {
 
 // 加入购物车
 const addToCart = async (car) => {
+  if (loading.value) return
+  
   try {
-    // 检查登录状态
     if (!userStore.isLoggedIn) {
       ElMessage.warning('请先登录')
       router.push('/login')
       return
     }
 
+    loading.value = true
     await axios.post('/api/cart', {
       carId: car.id,
       quantity: 1
@@ -186,6 +272,8 @@ const addToCart = async (car) => {
     ElMessage.success('已加入购物车')
   } catch (error) {
     ElMessage.error('加入购物车失败')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -200,33 +288,93 @@ const startChat = () => {
 }
 
 // 监听路由查询参数变化
-watch(() => route.query.q, () => {
+watch(() => route.query, () => {
   currentPage.value = 1
   fetchCars()
-})
+}, { deep: true })
 
 // 页面加载时执行
 onMounted(() => {
   fetchBanners()
+  fetchBrands()
   fetchCars()
 })
 </script>
 
 <style scoped>
-/* 主容器样式 */
 .home {
   padding: 20px;
 }
 
 /* 轮播图样式 */
-.banner {
-  margin-bottom: 30px;
+.banner-section {
+  margin-bottom: 40px;
 }
 
-.banner img {
+.banner-content {
+  position: relative;
+  height: 100%;
+}
+
+.banner-content img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 8px;
+}
+
+.banner-info {
+  position: absolute;
+  bottom: 40px;
+  left: 40px;
+  color: #fff;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.banner-info h2 {
+  font-size: 32px;
+  margin-bottom: 10px;
+}
+
+.banner-info p {
+  font-size: 18px;
+  margin-bottom: 20px;
+}
+
+/* 品牌展示样式 */
+.brand-section {
+  margin-bottom: 40px;
+}
+
+.section-title {
+  font-size: 24px;
+  margin-bottom: 20px;
+  color: #303133;
+  text-align: center;
+}
+
+.brand-list {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  flex-wrap: wrap;
+}
+
+.brand-item {
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.3s;
+}
+
+.brand-item:hover {
+  transform: translateY(-5px);
+}
+
+.brand-item img {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  margin-bottom: 10px;
 }
 
 /* 分类导航样式 */
@@ -234,7 +382,22 @@ onMounted(() => {
   margin-bottom: 30px;
 }
 
+.category-menu {
+  justify-content: center;
+}
+
+.el-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* 商品网格样式 */
+.car-section {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
 .car-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -242,23 +405,36 @@ onMounted(() => {
   margin-bottom: 30px;
 }
 
-/* 商品卡片样式 */
 .car-card {
   cursor: pointer;
-  transition: transform 0.3s;
+  transition: all 0.3s;
 }
 
 .car-card:hover {
   transform: translateY(-5px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+}
+
+.car-image-wrapper {
+  position: relative;
+  height: 200px;
 }
 
 .car-image {
   width: 100%;
-  height: 200px;
+  height: 100%;
   object-fit: cover;
+  border-radius: 8px 8px 0 0;
 }
 
-/* 商品信息样式 */
+.car-tags {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+}
+
 .car-info {
   padding: 15px;
 }
@@ -266,18 +442,28 @@ onMounted(() => {
 .car-info h3 {
   margin: 0 0 10px;
   font-size: 18px;
+  color: #303133;
 }
 
-.year-mileage {
+.car-specs {
+  display: flex;
+  gap: 15px;
   color: #666;
-  margin: 5px 0;
+  margin: 10px 0;
+  font-size: 14px;
+}
+
+.car-price {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 15px;
 }
 
 .price {
   color: #f56c6c;
   font-size: 20px;
   font-weight: bold;
-  margin: 10px 0;
 }
 
 /* 分页样式 */
@@ -295,6 +481,12 @@ onMounted(() => {
   z-index: 1000;
 }
 
+.service-button {
+  width: 50px;
+  height: 50px;
+  font-size: 24px;
+}
+
 .service-content {
   text-align: center;
 }
@@ -306,5 +498,25 @@ onMounted(() => {
 .service-content p {
   color: #666;
   margin-bottom: 15px;
+}
+
+/* 响应式布局 */
+@media (max-width: 768px) {
+  .banner-info {
+    left: 20px;
+    bottom: 20px;
+  }
+
+  .banner-info h2 {
+    font-size: 24px;
+  }
+
+  .banner-info p {
+    font-size: 16px;
+  }
+
+  .car-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
 }
 </style>

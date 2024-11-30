@@ -16,7 +16,7 @@
           <template #default="{ row }">
             <div class="car-info">
               <img 
-                :src="row.images?.split(',')[0] || '/images/default-car.jpg'" 
+                :src="getImageUrl(row.images)"
                 class="car-image"
                 :alt="row.model"
               >
@@ -30,7 +30,7 @@
         
         <el-table-column label="单价" width="150">
           <template #default="{ row }">
-            ¥{{ row.price?.toLocaleString() }}
+            ¥{{ formatPrice(row.price) }}
           </template>
         </el-table-column>
         
@@ -59,7 +59,7 @@
       
       <div class="cart-footer">
         <div class="total">
-          总计: <span class="price">¥{{ totalAmount.toLocaleString() }}</span>
+          总计: <span class="price">¥{{ formatPrice(totalAmount) }}</span>
         </div>
         <el-button 
           type="primary" 
@@ -83,6 +83,14 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 const router = useRouter()
 const userStore = useUserStore()
 const cartItems = ref([])
+
+const formatPrice = (price) => {
+  return price?.toLocaleString() || '0'
+}
+
+const getImageUrl = (images) => {
+  return images ? images.split(',')[0] : '/images/default-car.jpg'
+}
 
 const totalAmount = computed(() => {
   return cartItems.value.reduce((total, item) => {
@@ -110,7 +118,7 @@ const fetchCartItems = async () => {
 
 const updateQuantity = async (item) => {
   try {
-    await axios.put(`/api/cart/${item.id}`, {
+    await axios.put(`/api/cart/${item.cart_item_id}`, {
       quantity: item.quantity
     })
     ElMessage.success('更新成功')
