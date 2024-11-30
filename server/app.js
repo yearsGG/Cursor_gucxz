@@ -13,15 +13,25 @@ app.use(express.json())
 const pool = mysql.createPool(dbConfig)
 
 // 测试数据库连接
-pool.getConnection()
-  .then(connection => {
+async function testDatabaseConnection() {
+  try {
+    const connection = await pool.getConnection()
     console.log('数据库连接成功')
     connection.release()
+  } catch (error) {
+    console.error('数据库连接失败:', error)
+    throw error
+  }
+}
+
+// 添加错误处理中间件
+app.use((err, req, res, next) => {
+  console.error('服务器错误:', err)
+  res.status(500).json({
+    message: '服务器错误',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
   })
-  .catch(err => {
-    console.error('数据库连接失败:', err)
-    process.exit(1)  // 如果数据库连接失败，终止程序
-  })
+})
 
 const JWT_SECRET = 'your-secret-key'
 
@@ -204,7 +214,100 @@ app.get('/api/banners', async (req, res) => {
   }
 })
 
-// 获取汽车列表
+// 1. 先定义搜索路由（必须放在其他具体路由之前）
+app.get('/api/cars/search', async (req, res, next) => {
+  const connection = await pool.getConnection()
+  try {
+    const { q, page = 1, pageSize = 12, sort, brand } = req.query
+    
+    console.log('搜索请求参数:', { q, page, pageSize, sort, brand })
+    
+    const offset = (page - 1) * pageSize
+
+    // 基础查询
+    let query = `
+      SELECT DISTINCT c.*, b.name as brand 
+      FROM cars c 
+      JOIN brands b ON c.brand_id = b.id 
+      WHERE c.status = 'available'
+    `
+    const params = []
+
+    // 添加搜索条件
+    if (q) {
+      query += ` AND (
+        b.name LIKE ? OR 
+        c.model LIKE ? OR 
+        CONCAT(b.name, ' ', c.model) LIKE ? OR
+        c.description LIKE ? OR 
+        c.category LIKE ? OR 
+        c.color LIKE ? OR 
+        c.engine_type LIKE ? OR 
+        c.transmission LIKE ? OR 
+        c.fuel_type LIKE ? OR 
+        CAST(c.year AS CHAR) LIKE ? OR
+        CAST(c.price AS CHAR) LIKE ?
+      )`
+      const searchTerm = `%${q}%`
+      Array(11).fill(searchTerm).forEach(term => params.push(term))
+    }
+
+    // 添加品牌筛选
+    if (brand) {
+      query += ` AND b.name = ?`
+      params.push(brand)
+    }
+
+    // 添加排序
+    if (sort) {
+      switch (sort) {
+        case 'price_asc':
+          query += ` ORDER BY c.price ASC`
+          break
+        case 'price_desc':
+          query += ` ORDER BY c.price DESC`
+          break
+        case 'newest':
+          query += ` ORDER BY c.created_at DESC`
+          break
+        default:
+          query += ` ORDER BY c.created_at DESC`
+      }
+    } else {
+      query += ` ORDER BY c.created_at DESC`
+    }
+
+    // 添加分页
+    query += ` LIMIT ? OFFSET ?`
+    params.push(Number(pageSize), offset)
+
+    console.log('SQL查询:', { query, params })
+
+    // 执行查询
+    const [rows] = await connection.query(query, params)
+    console.log('查询结果数量:', rows.length)
+
+    // 获取总数
+    const [countResult] = await connection.query(
+      'SELECT COUNT(DISTINCT c.id) as total FROM cars c JOIN brands b ON c.brand_id = b.id WHERE c.status = "available"'
+    )
+
+    res.json({
+      items: rows,
+      total: countResult[0].total,
+      page: Number(page),
+      pageSize: Number(pageSize)
+    })
+
+  } catch (error) {
+    console.error('搜索失败:', error)
+    next(error)
+  } finally {
+    connection.release()
+  }
+})
+
+// 2. 然后是其他路由
 app.get('/api/cars', async (req, res) => {
   try {
     const { page = 1, pageSize = 12, category } = req.query
@@ -236,6 +339,26 @@ app.get('/api/cars', async (req, res) => {
   } catch (error) {
     console.error('获取汽车列表失败:', error)
     res.status(500).json({ message: '获取汽车列表失败' })
+  }
+})
+
+app.get('/api/cars/:id', async (req, res) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT c.*, b.name as brand 
+      FROM cars c 
+      JOIN brands b ON c.brand_id = b.id 
+      WHERE c.id = ?
+    `, [req.params.id])
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: '未找到该商品' })
+    }
+
+    res.json(rows[0])
+  } catch (error) {
+    console.error('获取汽车详情失败:', error)
+    res.status(500).json({ message: '获取商品信息失败' })
   }
 })
 
@@ -345,65 +468,6 @@ app.post('/api/cart', authenticateToken, async (req, res) => {
   }
 })
 
-// 获取单个汽车详情
-app.get('/api/cars/:id', async (req, res) => {
-  try {
-    const [rows] = await pool.query(`
-      SELECT c.*, b.name as brand 
-      FROM cars c 
-      JOIN brands b ON c.brand_id = b.id 
-      WHERE c.id = ?
-    `, [req.params.id])
-
-    if (rows.length === 0) {
-      return res.status(404).json({ message: '未找到该商品' })
-    }
-
-    res.json(rows[0])
-  } catch (error) {
-    console.error('获取汽车详情失败:', error)
-    res.status(500).json({ message: '获取商品信息失败' })
-  }
-})
-
-// 在应用启动前测试数据库连接
-async function testDatabaseConnection() {
-  try {
-    const connection = await pool.getConnection()
-    console.log('数据库连接测试成功')
-    
-    // 测试users表是否存在
-    const [tables] = await connection.query(`
-      SELECT TABLE_NAME 
-      FROM information_schema.TABLES 
-      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'
-    `, [dbConfig.database])
-    
-    if (tables.length === 0) {
-      console.error('users表不存在，请先创建数据库表')
-      process.exit(1)
-    }
-    
-    console.log('数据库表检查完成')
-    connection.release()
-  } catch (error) {
-    console.error('数据库连接测试失败:', error)
-    process.exit(1)
-  }
-}
-
-// 启动服务器
-async function startServer() {
-  await testDatabaseConnection()
-  
-  const PORT = 3000
-  app.listen(PORT, () => {
-    console.log(`服务器运行在端口 ${PORT}`)
-  })
-}
-
-startServer().catch(console.error) 
-
 // 更新购物车数量
 app.put('/api/cart/:id', authenticateToken, async (req, res) => {
   const connection = await pool.getConnection()
@@ -499,4 +563,65 @@ app.delete('/api/cart/:id', authenticateToken, async (req, res) => {
   } finally {
     connection.release()
   }
-}) 
+})
+
+// 获取品牌列表
+app.get('/api/brands', async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT * FROM brands 
+      WHERE 1=1 
+      ORDER BY name
+    `)
+    console.log('获取品牌列表成功:', rows.length)
+    res.json(rows)
+  } catch (error) {
+    console.error('获取品牌列表失败:', error)
+    next(error)
+  }
+})
+
+// 按品牌筛选汽车
+app.get('/api/cars/brand/:brandName', async (req, res) => {
+  try {
+    const { page = 1, pageSize = 12 } = req.query
+    const offset = (page - 1) * pageSize
+    const brandName = req.params.brandName
+
+    const [rows] = await pool.query(`
+      SELECT c.*, b.name as brand 
+      FROM cars c 
+      JOIN brands b ON c.brand_id = b.id 
+      WHERE b.name = ? AND c.status = 'available'
+      ORDER BY c.created_at DESC 
+      LIMIT ? OFFSET ?
+    `, [brandName, Number(pageSize), offset])
+
+    const [countResult] = await pool.query(`
+      SELECT COUNT(*) as total 
+      FROM cars c 
+      JOIN brands b ON c.brand_id = b.id 
+      WHERE b.name = ? AND c.status = 'available'
+    `, [brandName])
+
+    res.json({
+      items: rows,
+      total: countResult[0].total
+    })
+  } catch (error) {
+    console.error('获取品牌汽车列表失败:', error)
+    res.status(500).json({ message: '获取品牌汽车列表失败' })
+  }
+})
+
+// 启动服务器
+async function startServer() {
+  await testDatabaseConnection()
+  
+  const PORT = 3000
+  app.listen(PORT, () => {
+    console.log(`服务器运行在端口 ${PORT}`)
+  })
+}
+
+startServer().catch(console.error) 

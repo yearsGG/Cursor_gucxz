@@ -145,9 +145,9 @@ const handleSearch = () => {
     ElMessage.warning('请输入搜索关键词')
     return
   }
-  // 跳转到首页并带上搜索参数
+  // 跳转到搜索结果页面
   router.push({
-    path: '/',
+    path: '/search',
     query: { q: searchQuery.value }
   })
 }
@@ -161,7 +161,6 @@ const logout = () => {
 
 // 获取购物车数量
 const fetchCartCount = async () => {
-  // 只在用户登录时获取购物车数量
   if (!userStore.isLoggedIn) {
     cartCount.value = 0
     return
@@ -171,7 +170,6 @@ const fetchCartCount = async () => {
     const { data } = await axios.get('/api/cart/count')
     cartCount.value = data.count
   } catch (error) {
-    // 如果是401错误，清除用户状态
     if (error.response?.status === 401) {
       userStore.logout()
       cartCount.value = 0

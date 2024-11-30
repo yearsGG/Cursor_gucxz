@@ -5,6 +5,7 @@ import Register from '../views/Register.vue'
 import CarDetail from '../views/CarDetail.vue'
 import Cart from '../views/Cart.vue'
 import Checkout from '../views/Checkout.vue'
+import SearchResults from '../views/SearchResults.vue'
 
 const routes = [
   {
@@ -36,6 +37,11 @@ const routes = [
     path: '/checkout',
     name: 'Checkout',
     component: Checkout
+  },
+  {
+    path: '/search',
+    name: 'SearchResults',
+    component: SearchResults
   }
 ]
 

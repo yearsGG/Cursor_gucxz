@@ -166,11 +166,45 @@ const total = ref(0)
 // 分类选项定义
 const categories = [
   { label: '全部', value: 'all', icon: 'List' },
+  { label: '轿车', value: 'sedan', icon: 'Van' },
   { label: 'SUV', value: 'suv', icon: 'Van' },
-  { label: '轿车', value: 'sedan', icon: 'Location' },
   { label: '跑车', value: 'sports', icon: 'Basketball' },
-  { label: '新能源', value: 'electric', icon: 'Lightning' }
+  { label: '纯电动', value: 'electric', icon: 'Lightning' },
+  { label: '混动', value: 'hybrid', icon: 'Lightning' },
+  { label: 'MPV', value: 'mpv', icon: 'Van' },
+  { label: '皮卡', value: 'pickup', icon: 'Van' },
+  { label: '超跑', value: 'supercar', icon: 'Basketball' },
+  { label: '豪华车', value: 'luxury', icon: 'Van' },
+  { label: '越野车', value: 'offroad', icon: 'Van' }
 ]
+
+// 添加更多筛选条件
+const filters = {
+  priceRanges: [
+    { label: '30万以下', value: '0-300000' },
+    { label: '30-50万', value: '300000-500000' },
+    { label: '50-100万', value: '500000-1000000' },
+    { label: '100万以上', value: '1000000-999999999' }
+  ],
+  bodyTypes: [
+    { label: '两厢轿车', value: '两厢' },
+    { label: '三厢轿车', value: '三厢' },
+    { label: '掀背车', value: '掀背' },
+    { label: 'SUV', value: 'SUV' },
+    { label: '跑车', value: '跑车' }
+  ],
+  driveTypes: [
+    { label: '前驱', value: '前驱' },
+    { label: '后驱', value: '后驱' },
+    { label: '四驱', value: '四驱' }
+  ],
+  fuelTypes: [
+    { label: '汽油', value: '汽油' },
+    { label: '柴油', value: '柴油' },
+    { label: '纯电', value: '电动' },
+    { label: '混动', value: '混合动力' }
+  ]
+}
 
 // 格式化价格
 const formatPrice = (price) => {

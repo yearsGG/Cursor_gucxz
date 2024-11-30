@@ -1,5 +1,5 @@
 import { promises as fs } from 'fs'
-import { createWriteStream } from 'fs'
+import { createWriteStream, existsSync } from 'fs'
 import path from 'path'
 import https from 'https'
 import { fileURLToPath } from 'url'
@@ -7,74 +7,171 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// 使用国内CDN和图片源
 const IMAGE_URLS = {
-  banners: {
-    'banner1.jpg': 'https://images.pexels.com/photos/3802510/pexels-photo-3802510.jpeg',
-    'banner2.jpg': 'https://images.pexels.com/photos/3802512/pexels-photo-3802512.jpeg',
-    'banner3.jpg': 'https://images.pexels.com/photos/3802514/pexels-photo-3802514.jpeg'
+  // 品牌 logo
+  logos: {
+    'benz.png': 'https://img.alicdn.com/imgextra/i4/O1CN01XQqCsM1zK84NxBxqN_!!6000000006694-2-tps-200-200.png',
+    'bmw.png': 'https://img.alicdn.com/imgextra/i2/O1CN01Z5JKxg1zYQJqKZtY7_!!6000000006724-2-tps-200-200.png',
+    'audi.png': 'https://img.alicdn.com/imgextra/i3/O1CN01Y7uuHN1bVmkFIqhGf_!!6000000003469-2-tps-200-200.png',
+    'tesla.png': 'https://img.alicdn.com/imgextra/i4/O1CN01XHqF9H1MkWfjr3tP7_!!6000000001467-2-tps-200-200.png',
+    'toyota.png': 'https://img.alicdn.com/imgextra/i2/O1CN01QYu4nX1CxKrqyEPPd_!!6000000000143-2-tps-200-200.png',
+    'porsche.png': 'https://img.alicdn.com/imgextra/i3/O1CN01Z5JKxg1zYQJqKZtY7_!!6000000006724-2-tps-200-200.png',
+    'volkswagen.png': 'https://img.alicdn.com/imgextra/i4/O1CN01XHqF9H1MkWfjr3tP7_!!6000000001467-2-tps-200-200.png'
   },
+  // 轮播图 - 使用汽车之家的图片
+  banners: {
+    'banner1.jpg': 'https://car3.autoimg.cn/cardfs/product/g30/M01/A4/E8/1024x0_1_q95_autohomecar__ChxknGRYq6qABzOPAAj7y_uWWkc748.jpg',
+    'banner2.jpg': 'https://car3.autoimg.cn/cardfs/product/g30/M01/A4/E8/1024x0_1_q95_autohomecar__ChxknGRYq6qABzOPAAj7y_uWWkc749.jpg',
+    'banner3.jpg': 'https://car3.autoimg.cn/cardfs/product/g30/M01/A4/E8/1024x0_1_q95_autohomecar__ChxknGRYq6qABzOPAAj7y_uWWkc750.jpg'
+  },
+  // 汽车图片 - 使用汽车之家的图片
   cars: {
     benz: {
-      's500-1.jpg': 'https://images.pexels.com/photos/120049/pexels-photo-120049.jpeg',
-      's500-2.jpg': 'https://images.pexels.com/photos/193021/pexels-photo-193021.jpeg',
-      's500-3.jpg': 'https://images.pexels.com/photos/707046/pexels-photo-707046.jpeg'
+      's500-1.jpg': 'https://car3.autoimg.cn/cardfs/product/g30/M01/A4/E8/1024x0_1_q95_autohomecar__ChxknGRYq6qABzOPAAj7y_uWWkc751.jpg',
+      's500-2.jpg': 'https://car3.autoimg.cn/cardfs/product/g30/M01/A4/E8/1024x0_1_q95_autohomecar__ChxknGRYq6qABzOPAAj7y_uWWkc752.jpg',
+      's500-3.jpg': 'https://car3.autoimg.cn/cardfs/product/g30/M01/A4/E8/1024x0_1_q95_autohomecar__ChxknGRYq6qABzOPAAj7y_uWWkc753.jpg'
     },
     bmw: {
-      'x7-1.jpg': 'https://images.pexels.com/photos/892522/pexels-photo-892522.jpeg',
-      'x7-2.jpg': 'https://images.pexels.com/photos/951318/pexels-photo-951318.jpeg',
-      'x7-3.jpg': 'https://images.pexels.com/photos/1149137/pexels-photo-1149137.jpeg'
-    },
-    porsche: {
-      '911-1.jpg': 'https://images.pexels.com/photos/3608542/pexels-photo-3608542.jpeg',
-      '911-2.jpg': 'https://images.pexels.com/photos/3752169/pexels-photo-3752169.jpeg',
-      '911-3.jpg': 'https://images.pexels.com/photos/3786091/pexels-photo-3786091.jpeg'
-    },
-    tesla: {
-      'model-y-1.jpg': 'https://images.pexels.com/photos/7516347/pexels-photo-7516347.jpeg',
-      'model-y-2.jpg': 'https://images.pexels.com/photos/7516401/pexels-photo-7516401.jpeg',
-      'model-y-3.jpg': 'https://images.pexels.com/photos/7516416/pexels-photo-7516416.jpeg'
+      'x7-1.jpg': 'https://car3.autoimg.cn/cardfs/product/g30/M01/A4/E8/1024x0_1_q95_autohomecar__ChxknGRYq6qABzOPAAj7y_uWWkc754.jpg',
+      'x7-2.jpg': 'https://car3.autoimg.cn/cardfs/product/g30/M01/A4/E8/1024x0_1_q95_autohomecar__ChxknGRYq6qABzOPAAj7y_uWWkc755.jpg',
+      'x7-3.jpg': 'https://car3.autoimg.cn/cardfs/product/g30/M01/A4/E8/1024x0_1_q95_autohomecar__ChxknGRYq6qABzOPAAj7y_uWWkc756.jpg'
     }
+  },
+  // 默认图片
+  misc: {
+    'default-avatar.png': 'https://img.alicdn.com/imgextra/i4/O1CN01XHqF9H1MkWfjr3tP7_!!6000000001467-2-tps-200-200.png',
+    'default-car.jpg': 'https://car3.autoimg.cn/cardfs/product/g30/M01/A4/E8/1024x0_1_q95_autohomecar__ChxknGRYq6qABzOPAAj7y_uWWkc757.jpg'
   }
 }
 
 async function downloadImages() {
   const publicDir = path.join(__dirname, '../public')
+  const skippedFiles = []
+  const failedDownloads = []
   
-  // 创建必要的目录
-  await fs.mkdir(path.join(publicDir, 'images/banners'), { recursive: true })
-  await fs.mkdir(path.join(publicDir, 'images/cars/benz'), { recursive: true })
-  await fs.mkdir(path.join(publicDir, 'images/cars/bmw'), { recursive: true })
-  await fs.mkdir(path.join(publicDir, 'images/cars/porsche'), { recursive: true })
-  await fs.mkdir(path.join(publicDir, 'images/cars/tesla'), { recursive: true })
+  // 创建目录结构
+  const directories = [
+    'images/logos',
+    'images/banners',
+    'images/cars/benz',
+    'images/cars/bmw',
+    'images/misc'
+  ]
 
-  // 下载轮播图
-  for (const [filename, url] of Object.entries(IMAGE_URLS.banners)) {
-    try {
-      await downloadImage(url, path.join(publicDir, 'images/banners', filename))
-      console.log(`成功下载: ${filename}`)
-    } catch (error) {
-      console.error(`下载失败 ${filename}:`, error.message)
-    }
+  for (const dir of directories) {
+    await fs.mkdir(path.join(publicDir, dir), { recursive: true })
   }
 
-  // 下载汽车图片
-  for (const [brand, images] of Object.entries(IMAGE_URLS.cars)) {
-    for (const [filename, url] of Object.entries(images)) {
-      try {
-        await downloadImage(url, path.join(publicDir, 'images/cars', brand, filename))
-        console.log(`成功下载: ${brand}/${filename}`)
-      } catch (error) {
-        console.error(`下载失败 ${brand}/${filename}:`, error.message)
+  // 下载所有图片
+  const categories = Object.entries(IMAGE_URLS)
+  for (const [category, items] of categories) {
+    if (category === 'cars') {
+      // 处理汽车图片
+      for (const [brand, images] of Object.entries(items)) {
+        for (const [filename, url] of Object.entries(images)) {
+          const filepath = path.join(publicDir, 'images/cars', brand, filename)
+          
+          // 检查文件是否已存在
+          if (existsSync(filepath)) {
+            console.log(`⚡ 跳过已存在: cars/${brand}/${filename}`)
+            skippedFiles.push(`cars/${brand}/${filename}`)
+            continue
+          }
+
+          try {
+            await downloadImage(url, filepath)
+            console.log(`✓ 下载成功: cars/${brand}/${filename}`)
+          } catch (error) {
+            console.error(`✗ 下载失败: cars/${brand}/${filename}:`, error.message)
+            failedDownloads.push({
+              category: 'cars',
+              brand,
+              filename,
+              url,
+              error: error.message
+            })
+          }
+        }
+      }
+    } else {
+      // 处理其他类别的图片
+      for (const [filename, url] of Object.entries(items)) {
+        const filepath = path.join(publicDir, 'images', category, filename)
+        
+        // 检查文件是否已存在
+        if (existsSync(filepath)) {
+          console.log(`⚡ 跳过已存在: ${category}/${filename}`)
+          skippedFiles.push(`${category}/${filename}`)
+          continue
+        }
+
+        try {
+          await downloadImage(url, filepath)
+          console.log(`✓ 下载成功: ${category}/${filename}`)
+        } catch (error) {
+          console.error(`✗ 下载失败: ${category}/${filename}:`, error.message)
+          failedDownloads.push({
+            category,
+            filename,
+            url,
+            error: error.message
+          })
+        }
       }
     }
   }
+
+  // 生成下载报告
+  console.log('\n下载报告:')
+  console.log('总图片数:', getTotalImageCount())
+  console.log('已存在数:', skippedFiles.length)
+  console.log('成功数:', getTotalImageCount() - failedDownloads.length - skippedFiles.length)
+  console.log('失败数:', failedDownloads.length)
+  
+  if (skippedFiles.length > 0) {
+    console.log('\n跳过的文件:')
+    skippedFiles.forEach(file => console.log(`- ${file}`))
+  }
+  
+  if (failedDownloads.length > 0) {
+    console.log('\n失败列表:')
+    failedDownloads.forEach(item => {
+      const path = item.category === 'cars'
+        ? `cars/${item.brand}/${item.filename}`
+        : `${item.category}/${item.filename}`
+      console.log(`- ${path} (${item.error})`)
+    })
+  }
+}
+
+function getTotalImageCount() {
+  let count = 0
+  for (const [category, items] of Object.entries(IMAGE_URLS)) {
+    if (category === 'cars') {
+      for (const images of Object.values(items)) {
+        count += Object.keys(images).length
+      }
+    } else {
+      count += Object.keys(items).length
+    }
+  }
+  return count
 }
 
 function downloadImage(url, filepath) {
   return new Promise((resolve, reject) => {
-    https.get(url, (response) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('下载超时'))
+    }, 10000)
+
+    https.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    }, (response) => {
       if (response.statusCode !== 200) {
-        reject(new Error(`下载失败 ${url}: ${response.statusCode}`))
+        reject(new Error(`HTTP错误: ${response.statusCode}`))
         return
       }
 
@@ -82,16 +179,25 @@ function downloadImage(url, filepath) {
       response.pipe(file)
       
       file.on('finish', () => {
+        clearTimeout(timeout)
         file.close()
         resolve()
       })
 
       file.on('error', (err) => {
+        clearTimeout(timeout)
         fs.unlink(filepath).catch(console.error)
         reject(err)
       })
-    }).on('error', reject)
+    }).on('error', (err) => {
+      clearTimeout(timeout)
+      reject(err)
+    })
   })
 }
 
-downloadImages().catch(console.error) 
+// 执行下载
+console.log('开始下载图片...')
+downloadImages()
+  .then(() => console.log('\n下载过程完成!'))
+  .catch(error => console.error('\n下载过程出错:', error)) 
