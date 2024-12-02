@@ -13,6 +13,14 @@ http.interceptors.request.use(
     // 对于文件上传请求，不设置 Content-Type
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type']
+    } else {
+      // 为非文件上传请求添加缓存控制头
+      config.headers = {
+        ...config.headers,
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
     }
     return config
   },

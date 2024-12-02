@@ -24,6 +24,28 @@
       <div v-show="showDetails" class="profile-form">
         <h2>个人信息</h2>
         
+        <div class="avatar-upload">
+          <img 
+            :src="userInfo.avatar || '/images/default-avatar.png'" 
+            class="avatar-preview"
+            alt="用户头像"
+          >
+          <input 
+            type="file" 
+            ref="avatarInput"
+            @change="handleAvatarChange" 
+            accept="image/*"
+            style="display: none"
+          >
+          <el-button 
+            type="primary"
+            @click="triggerAvatarUpload"
+            :loading="uploading"
+          >
+            更换头像
+          </el-button>
+        </div>
+
         <div class="form-group">
           <label for="username">账号</label>
           <input 
@@ -315,7 +337,10 @@ export default {
     const fetchUserInfo = async () => {
       try {
         const response = await axios.get('/api/user/profile')
-        userInfo.value = response.data
+        userInfo.value = {
+          ...response.data,
+          avatar: userStore.user?.avatar // 确保包含头像URL
+        }
       } catch (error) {
         if (error.response?.status === 401) {
           userStore.logout()
@@ -466,6 +491,69 @@ export default {
       router.push(`/car/${carId}`)
     }
 
+    // 添加头像相关的响应式变量
+    const avatarInput = ref(null)
+    const uploading = ref(false)
+
+    // 触发文件选择
+    const triggerAvatarUpload = () => {
+      avatarInput.value.click()
+    }
+
+    // 处理头像变更
+    const handleAvatarChange = async (event) => {
+      const file = event.target.files[0]
+      if (!file) return
+      
+      // 验证文件类型和大小
+      if (!file.type.startsWith('image/')) {
+        ElMessage.error('请选择图片文件')
+        return
+      }
+      
+      if (file.size > 5 * 1024 * 1024) {
+        ElMessage.error('图片大小不能超过5MB')
+        return
+      }
+
+      try {
+        uploading.value = true
+        
+        // 创建FormData对象
+        const formData = new FormData()
+        formData.append('avatar', file)
+
+        // 添加时间戳防止缓存
+        const timestamp = new Date().getTime()
+        
+        // 发送上传请求
+        const response = await axios.post(`/api/user/avatar?t=${timestamp}`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        })
+
+        // 更新用户头像（添加时间戳防止缓存）
+        userInfo.value.avatar = `${response.data.avatarUrl}?t=${timestamp}`
+        userStore.setUser({
+          ...userStore.user,
+          avatar: `${response.data.avatarUrl}?t=${timestamp}`
+        })
+
+        ElMessage.success('头像更新成功')
+        
+        // 清除文件输入值，允许重复选择同一文件
+        event.target.value = ''
+      } catch (error) {
+        console.error('头像上传失败:', error)
+        ElMessage.error('头像上传失败')
+      } finally {
+        uploading.value = false
+      }
+    }
+
     return {
       userInfo,
       messages,
@@ -492,7 +580,11 @@ export default {
       getFavorites,
       removeFavorite,
       viewDetail,
-      formatDate
+      formatDate,
+      avatarInput,
+      uploading,
+      triggerAvatarUpload,
+      handleAvatarChange
     }
   },
 
@@ -1041,5 +1133,22 @@ input::-webkit-input-placeholder {
 input::-moz-placeholder {
   color: #909399;
   opacity: 1;
+}
+
+.avatar-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 30px;
+}
+
+.avatar-preview {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #dcdfe6;
+  box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1);
 }
 </style> 

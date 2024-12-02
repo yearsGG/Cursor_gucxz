@@ -43,6 +43,7 @@
                 <el-avatar 
                   :size="32"
                   :src="userStore.user?.avatar || '/images/default-avatar.png'"
+                  @error="handleAvatarError"
                 />
                 <span class="username">{{ userStore.user?.username }}</span>
                 <el-icon><ArrowDown /></el-icon>
@@ -196,6 +197,11 @@ onMounted(() => {
     fetchCartCount()
   }
 })
+
+const handleAvatarError = (e) => {
+  console.error('头像加载失败:', userStore.user?.avatar)
+  e.target.src = '/images/default-avatar.png'
+}
 </script>
 
 <style scoped>

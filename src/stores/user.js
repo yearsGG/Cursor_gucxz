@@ -13,6 +13,11 @@ export const useUserStore = defineStore('user', {
     },
 
     setUser(user) {
+      if (user && user.avatar) {
+        if (!user.avatar.startsWith('http')) {
+          user.avatar = `http://localhost:3000${user.avatar}`
+        }
+      }
       this.user = user
       localStorage.setItem('user', JSON.stringify(user))
     },

@@ -10,6 +10,7 @@ const path = require('path');
 const authRouter = require('./routes/auth');
 const multer = require('multer')
 const fs = require('fs')
+const userRouter = require('./routes/user')
 
 
 const app = express()
@@ -18,7 +19,15 @@ app.use(cors({
   origin: 'http://localhost:5174',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization',
+    'Cache-Control',
+    'Pragma',
+    'Expires',
+    'X-Requested-With'
+  ],
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
 }))
 
 app.options('*', cors());
@@ -42,11 +51,17 @@ async function testDatabaseConnection() {
 
 // 添加错误处理中件
 app.use((err, req, res, next) => {
-  console.error('服务器错误:', err)
+  console.error('服务器错误:', {
+    error: err,
+    stack: err.stack,
+    url: req.url,
+    method: req.method,
+    headers: req.headers
+  });
   res.status(500).json({
     message: '服务器错误',
     error: process.env.NODE_ENV === 'development' ? err.message : undefined
-  })
+  });
 })
 
 const JWT_SECRET = 'your-secret-key'
@@ -146,52 +161,39 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body
 
-    console.log('尝试登录:', username)
-
-    // 查找用户
+    // 获取用户信息（包括头像）
     const [users] = await connection.query(
-      'SELECT * FROM users WHERE username = ?',
+      'SELECT id, username, password, email, avatar, role FROM users WHERE username = ?',
       [username]
     )
 
     if (users.length === 0) {
-      console.log('用户不存在:', username)
       return res.status(401).json({ message: '用户名或密码错误' })
     }
 
     const user = users[0]
+    const validPassword = await bcrypt.compare(password, user.password)
 
-    // 验证密码
-    const isValidPassword = await bcrypt.compare(password, user.password)
-    if (!isValidPassword) {
-      console.log('密码错误:', username)
+    if (!validPassword) {
       return res.status(401).json({ message: '用户名或密码错误' })
     }
 
-    console.log('登录成功:', username)
+    // 生成token
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET)
 
-    // 生成JWT令牌
-    const token = jwt.sign(
-      { userId: user.id, username: user.username, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    )
+    // 不返回密码
+    delete user.password
+
+    // 确保avatar字段存在
+    console.log('登录用户信息:', user)
 
     res.json({
       token,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: user.role
-      }
+      user
     })
   } catch (error) {
     console.error('登录失败:', error)
-    res.status(500).json({ 
-      message: '登录失败',
-      error: error.message 
-    })
+    res.status(500).json({ message: '登录失败' })
   } finally {
     connection.release()
   }
@@ -486,7 +488,7 @@ app.post('/api/cart', authenticateToken, async (req, res) => {
 
     if (cars.length === 0) {
       await connection.rollback()
-      return res.status(404).json({ message: '商品不存在或已下架' })
+      return res.status(404).json({ message: '商品不存在或已下' })
     }
 
     const car = cars[0]
@@ -689,9 +691,20 @@ app.get('/api/cars/brand/:brandName', async (req, res) => {
 app.use('/api/favorites', favoritesRouter);
 app.use('/api/comments', commentsRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/user', userRouter);
 
 // 添加静态文件服务
-app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')))
+app.use('/uploads', express.static(path.join(__dirname, '../public/uploads'), {
+  etag: false,
+  maxAge: 0,
+  setHeaders: (res) => {
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+  }
+}));
 
 // 检查上传目录
 function ensureUploadDirs() {
@@ -727,6 +740,26 @@ function ensureUploadDirs() {
 
 // 在服务器启动时调用
 ensureUploadDirs()
+
+// 添加全局缓存控制中间件
+app.use((req, res, next) => {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+    'Pragma': 'no-cache',
+    'Expires': '0'
+  });
+  next();
+});
+
+// 添加请求日志中间件
+app.use((req, res, next) => {
+  console.log('收到请求:', {
+    method: req.method,
+    url: req.url,
+    headers: req.headers
+  });
+  next();
+});
 
 // 启动服务器
 async function startServer() {
