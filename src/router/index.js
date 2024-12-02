@@ -6,6 +6,7 @@ import CarDetail from '../views/CarDetail.vue'
 import Cart from '../views/Cart.vue'
 import Checkout from '../views/Checkout.vue'
 import SearchResults from '../views/SearchResults.vue'
+import UserProfile from '../views/UserProfile.vue'
 
 const routes = [
   {
@@ -42,6 +43,12 @@ const routes = [
     path: '/search',
     name: 'SearchResults',
     component: SearchResults
+  },
+  {
+    path: '/profile',
+    name: 'UserProfile',
+    component: UserProfile,
+    meta: { requiresAuth: true }
   }
 ]
 

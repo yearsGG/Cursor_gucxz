@@ -4,11 +4,27 @@ const mysql = require('mysql2/promise')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const dbConfig = require('./config/db.config')
+const favoritesRouter = require('./routes/favorites');
+const commentsRouter = require('./routes/comments');
+const path = require('path');
+const authRouter = require('./routes/auth');
+const multer = require('multer')
+const fs = require('fs')
+
 
 const app = express()
 
-app.use(cors())
+app.use(cors({
+  origin: 'http://localhost:5174',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}))
+
+app.options('*', cors());
+
 app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
 
 const pool = mysql.createPool(dbConfig)
 
@@ -24,7 +40,7 @@ async function testDatabaseConnection() {
   }
 }
 
-// 添加错误处理中间件
+// 添加错误处理中件
 app.use((err, req, res, next) => {
   console.error('服务器错误:', err)
   res.status(500).json({
@@ -35,75 +51,90 @@ app.use((err, req, res, next) => {
 
 const JWT_SECRET = 'your-secret-key'
 
+// 配置文件上传
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    // 使用绝对路径
+    const uploadDir = path.join(__dirname, '../public/uploads/avatars')
+    // 确保目录存在
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true })
+    }
+    cb(null, uploadDir)
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+    const ext = path.extname(file.originalname)
+    cb(null, 'avatar-' + uniqueSuffix + ext)
+  }
+})
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB
+  },
+  fileFilter: (req, file, cb) => {
+    // 只允许上传图片
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(new Error('只能上传图片文件'))
+    }
+    cb(null, true)
+  }
+}).single('avatar')
+
+// 确保上传目录存在
+const uploadDir = path.join(__dirname, '../public/uploads/avatars')
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true })
+  console.log('创建上传目录:', uploadDir)
+}
+
 // 用户注册
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', upload, async (req, res) => {
   const connection = await pool.getConnection()
   try {
+    console.log('注册请求体:', req.body)
+    console.log('上传的文件:', req.file)
+
     const { username, password, email, phone } = req.body
 
-    // 验证请求数据
+    // 验证必填字段
     if (!username || !password || !email) {
       return res.status(400).json({ message: '用户名、密码和邮箱都是必填项' })
     }
 
-    console.log('开始注册用户:', { username, email, phone })
-
-    // 开始事务
-    await connection.beginTransaction()
-
-    // 检查用户名是否已存在
-    const [existingUsers] = await connection.query(
-      'SELECT id, username, email FROM users WHERE username = ? OR email = ?',
-      [username, email]
-    )
-
-    if (existingUsers.length > 0) {
-      const existing = existingUsers[0]
-      const message = existing.username === username 
-        ? '用户名已存在' 
-        : '邮箱已被使用'
-      
-      console.log('注册失败:', message, existing)
-      await connection.rollback()
-      return res.status(400).json({ message })
+    // 验证文件上传
+    if (!req.file) {
+      return res.status(400).json({ message: '请上传头像' })
     }
+
+    // 构建头像URL
+    const avatarUrl = `/uploads/avatars/${req.file.filename}`
 
     // 加密密码
     const hashedPassword = await bcrypt.hash(password, 10)
-    console.log('密码加密完成')
 
     // 插入新用户
     const [result] = await connection.query(
-      `INSERT INTO users (username, password, email, phone, role) 
-       VALUES (?, ?, ?, ?, 'user')`,
-      [username, hashedPassword, email, phone || null]
+      `INSERT INTO users (username, password, email, phone, avatar, role) 
+       VALUES (?, ?, ?, ?, ?, 'user')`,
+      [username, hashedPassword, email, phone || null, avatarUrl]
     )
 
-    // 提交事务
-    await connection.commit()
-    console.log('用户注册成功:', { userId: result.insertId, username })
+    console.log('用户注册成功:', {
+      userId: result.insertId,
+      avatarUrl: avatarUrl
+    })
 
     res.status(201).json({
       message: '注册成功',
-      userId: result.insertId
+      userId: result.insertId,
+      avatarUrl: avatarUrl
     })
   } catch (error) {
-    // 回滚事务
-    await connection.rollback()
-    console.error('注册失败，详细错误:', error)
-
-    // 根据错误类型返回不同的错误信息
-    if (error.code === 'ER_DUP_ENTRY') {
-      res.status(400).json({ 
-        message: '用户名或邮箱已存在',
-        error: error.message 
-      })
-    } else {
-      res.status(500).json({ 
-        message: '注册失败，请稍后重试',
-        error: error.message 
-      })
-    }
+    console.error('注册失败:', error)
+    res.status(500).json({ message: '注册失败', error: error.message })
   } finally {
     connection.release()
   }
@@ -184,22 +215,62 @@ const authenticateToken = (req, res, next) => {
   })
 }
 
-// 获取当前用户信息
+// 获取用户个人信息
 app.get('/api/user/profile', authenticateToken, async (req, res) => {
   try {
-    const [users] = await pool.query(
-      'SELECT id, username, email, phone, role FROM users WHERE id = ?',
-      [req.user.userId]
+    const userId = req.user.userId
+    const [rows] = await pool.query(
+      'SELECT username, email, phone FROM users WHERE id = ?',
+      [userId]
     )
-
-    if (users.length === 0) {
+    
+    if (rows.length === 0) {
       return res.status(404).json({ message: '用户不存在' })
     }
-
-    res.json(users[0])
+    
+    res.json(rows[0])
   } catch (error) {
-    console.error('获取用户信息失败:', error)
-    res.status(500).json({ message: '获取用户信息失败' })
+    console.error('获取用户信息错误:', error)
+    res.status(500).json({ message: '服务器错误' })
+  }
+})
+
+// 更新用户个人信息
+app.put('/api/user/profile', authenticateToken, async (req, res) => {
+  const { phone, email, newPassword } = req.body
+  const userId = req.user.userId
+  
+  try {
+    let query
+    let values
+    
+    if (newPassword) {
+      const hashedPassword = await bcrypt.hash(newPassword, 10)
+      query = `
+        UPDATE users 
+        SET phone = ?, email = ?, password = ? 
+        WHERE id = ?
+      `
+      values = [phone, email, hashedPassword, userId]
+    } else {
+      query = `
+        UPDATE users 
+        SET phone = ?, email = ? 
+        WHERE id = ?
+      `
+      values = [phone, email, userId]
+    }
+    
+    const [result] = await pool.query(query, values)
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: '用户不存在' })
+    }
+    
+    res.json({ message: '更新成功' })
+  } catch (error) {
+    console.error('更新用户信息错误:', error)
+    res.status(500).json({ message: '服务器错误' })
   }
 })
 
@@ -358,11 +429,11 @@ app.get('/api/cars/:id', async (req, res) => {
     res.json(rows[0])
   } catch (error) {
     console.error('获取汽车详情失败:', error)
-    res.status(500).json({ message: '获取商品信息失败' })
+    res.status(500).json({ message: '获取商品信失败' })
   }
 })
 
-// 获取购物车数量
+// 获取购物数量
 app.get('/api/cart/count', authenticateToken, async (req, res) => {
   try {
     const [result] = await pool.query(
@@ -522,7 +593,7 @@ app.delete('/api/cart/:id', authenticateToken, async (req, res) => {
     const cartItemId = req.params.id
     const userId = req.user.userId
 
-    // 开始事务
+    // 开始事
     await connection.beginTransaction()
 
     // 检查购物车项是否存在且属于当前用户
@@ -613,6 +684,49 @@ app.get('/api/cars/brand/:brandName', async (req, res) => {
     res.status(500).json({ message: '获取品牌汽车列表失败' })
   }
 })
+
+// 添加路由
+app.use('/api/favorites', favoritesRouter);
+app.use('/api/comments', commentsRouter);
+app.use('/api/auth', authRouter);
+
+// 添加静态文件服务
+app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')))
+
+// 检查上传目录
+function ensureUploadDirs() {
+  const dirs = [
+    path.join(__dirname, '../public'),
+    path.join(__dirname, '../public/uploads'),
+    path.join(__dirname, '../public/uploads/avatars')
+  ]
+
+  dirs.forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      try {
+        fs.mkdirSync(dir, { recursive: true })
+        console.log(`创建目录成功: ${dir}`)
+      } catch (error) {
+        console.error(`创建目录失败: ${dir}`, error)
+        process.exit(1)
+      }
+    }
+  })
+
+  // 测试写入权限
+  const testFile = path.join(dirs[2], 'test.txt')
+  try {
+    fs.writeFileSync(testFile, 'test')
+    fs.unlinkSync(testFile)
+    console.log('上传目录权限正常')
+  } catch (error) {
+    console.error('上传目录权限测试失败:', error)
+    process.exit(1)
+  }
+}
+
+// 在服务器启动时调用
+ensureUploadDirs()
 
 // 启动服务器
 async function startServer() {

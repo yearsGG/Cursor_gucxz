@@ -1,24 +1,19 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
-import 'element-plus/dist/index.css'
-import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router'
-import http from '@/utils/axios'
+import ElementPlus from 'element-plus'
+import 'element-plus/dist/index.css'
+import axios from '@/utils/axios'
 
 const app = createApp(App)
+const pinia = createPinia()
 
-app.config.globalProperties.$http = http
-// 替换全局axios
-window.axios = http
+app.use(pinia)
+app.use(router)
+app.use(ElementPlus)
 
-// 注册所有图标
-for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-  app.component(key, component)
-}
+app.config.globalProperties.$http = axios
+window.axios = axios
 
-app.use(createPinia())
-   .use(router)
-   .use(ElementPlus)
-   .mount('#app') 
+app.mount('#app') 

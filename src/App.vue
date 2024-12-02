@@ -50,8 +50,10 @@
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item>
-                    <el-icon><User /></el-icon>
+                    <router-link to="/profile" class="dropdown-link">
+                      <el-icon><User /></el-icon>
                     个人中心
+                    </router-link>
                   </el-dropdown-item>
                   <el-dropdown-item>
                     <el-icon><List /></el-icon>
@@ -367,5 +369,22 @@ onMounted(() => {
   padding-top: 20px;
   border-top: 1px solid rgba(255,255,255,0.1);
   color: #b3c0d1;
+}
+
+.dropdown-link {
+  color: inherit;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.el-dropdown-item {
+  padding: 0;
+}
+
+.el-dropdown-item .dropdown-link {
+  padding: 5px 12px;
 }
 </style> 
