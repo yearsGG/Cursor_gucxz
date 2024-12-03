@@ -113,6 +113,11 @@
   resolved "https://registry.npmmirror.com/@types/lodash/-/lodash-4.17.13.tgz"
   integrity sha512-lfx+dftrEZcdBPczf9d0Qv0x+j/rfNCMuC6OcfXmO8gkfeNAY88PgKUbvG56whcN23gc27yenwF6oJZXGFpYxg==
 
+"@types/trusted-types@^2.0.7":
+  version "2.0.7"
+  resolved "https://registry.npmmirror.com/@types/trusted-types/-/trusted-types-2.0.7.tgz"
+  integrity sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==
+
 "@types/web-bluetooth@^0.0.16":
   version "0.0.16"
   resolved "https://registry.npmmirror.com/@types/web-bluetooth/-/web-bluetooth-0.0.16.tgz"
@@ -376,6 +381,14 @@ core-util-is@~1.0.0:
   resolved "https://registry.npmmirror.com/core-util-is/-/core-util-is-1.0.3.tgz"
   integrity sha512-ZQBvi1DcpJ4GDqanjucZ2Hj3wEO5pZDS89BWbkcrvdxksJorwUDDZamX9ldFkp9aw2lmBDLgkObEA4DWNJ9FYQ==
 
+cors@^2.8.5:
+  version "2.8.5"
+  resolved "https://registry.npmmirror.com/cors/-/cors-2.8.5.tgz"
+  integrity sha512-KIHbLJqu73RGr/hnbrO9uBeixNGuvSQjul/jdFvS/KFSIH1hWVd1ng7zOHx+YrEfInLG7q4n6GHQ9cDtxv/P6g==
+  dependencies:
+    object-assign "^4"
+    vary "^1"
+
 csstype@^3.1.3:
   version "3.1.3"
   resolved "https://registry.npmmirror.com/csstype/-/csstype-3.1.3.tgz"
@@ -426,6 +439,13 @@ detect-libc@^1.0.3:
   version "1.0.3"
   resolved "https://registry.npmmirror.com/detect-libc/-/detect-libc-1.0.3.tgz"
   integrity sha512-pGjwhsmsp4kL2RTz08wcOlGN83otlqHeD/Z5T8GXZB+/YcpQ/dgo+lbU8ZsGxV0HIvqqxo9l7mqYwyYMD9bKDg==
+
+dompurify@^3.2.2:
+  version "3.2.2"
+  resolved "https://registry.npmmirror.com/dompurify/-/dompurify-3.2.2.tgz"
+  integrity sha512-YMM+erhdZ2nkZ4fTNRTSI94mb7VG7uVF5vj5Zde7tImgnhZE3R6YW/IACGIHb2ux+QkEXMhe591N+5jWOmL4Zw==
+  optionalDependencies:
+    "@types/trusted-types" "^2.0.7"
 
 echarts@^5.4.3:
   version "5.5.1"
@@ -770,6 +790,11 @@ magic-string@^0.30.11:
   dependencies:
     "@jridgewell/sourcemap-codec" "^1.5.0"
 
+marked@^15.0.3:
+  version "15.0.3"
+  resolved "https://registry.npmmirror.com/marked/-/marked-15.0.3.tgz"
+  integrity sha512-Ai0cepvl2NHnTcO9jYDtcOEtVBNVYR31XnEA3BndO7f5As1wzpcOceSUM8FDkNLJNIODcLpDTWay/qQhqbuMvg==
+
 media-typer@0.3.0:
   version "0.3.0"
   resolved "https://registry.npmmirror.com/media-typer/-/media-typer-0.3.0.tgz"
@@ -819,6 +844,11 @@ minimist@^1.2.6:
   version "1.2.8"
   resolved "https://registry.npmmirror.com/minimist/-/minimist-1.2.8.tgz"
   integrity sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==
+
+mitt@^3.0.1:
+  version "3.0.1"
+  resolved "https://registry.npmmirror.com/mitt/-/mitt-3.0.1.tgz"
+  integrity sha512-vKivATfr97l2/QBCYAkXYDbrIWPM2IIKEl7YPhjCvKlG3kE2gm+uBo6nEXK3M5/Ffh/FLpKExzOQ3JJoJGFKBw==
 
 mkdirp@^0.5.4:
   version "0.5.6"
@@ -892,7 +922,7 @@ normalize-wheel-es@^1.2.0:
   resolved "https://registry.npmmirror.com/normalize-wheel-es/-/normalize-wheel-es-1.2.0.tgz"
   integrity sha512-Wj7+EJQ8mSuXr2iWfnujrimU35R2W4FAErEyTmJoJ7ucwTn2hOUSsRehMb5RSYkxXGTM7Y9QpvPmp++w5ftoJw==
 
-object-assign@^4.1.1:
+object-assign@^4, object-assign@^4.1.1:
   version "4.1.1"
   resolved "https://registry.npmmirror.com/object-assign/-/object-assign-4.1.1.tgz"
   integrity sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==
@@ -1175,7 +1205,7 @@ utils-merge@1.0.1:
   resolved "https://registry.npmmirror.com/utils-merge/-/utils-merge-1.0.1.tgz"
   integrity sha512-pMZTvIkT1d+TFGvDOqodOclx0QWkkgi6Tdoa8gC8ffGAAqz9pzPTZWAybbsHHoED/ztMtkv/VoYTYyShUn81hA==
 
-vary@~1.1.2:
+vary@^1, vary@~1.1.2:
   version "1.1.2"
   resolved "https://registry.npmmirror.com/vary/-/vary-1.1.2.tgz"
   integrity sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==

@@ -4,23 +4,17 @@ import { ElMessage } from 'element-plus'
 const http = axios.create({
   baseURL: 'http://localhost:3000',
   timeout: 15000,
-  withCredentials: true
+  withCredentials: true,
+  retry: 3,
+  retryDelay: 1000
 })
 
 // 请求拦截器
 http.interceptors.request.use(
   config => {
-    // 对于文件上传请求，不设置 Content-Type
-    if (config.data instanceof FormData) {
-      delete config.headers['Content-Type']
-    } else {
-      // 为非文件上传请求添加缓存控制头
-      config.headers = {
-        ...config.headers,
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      }
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
     }
     return config
   },
@@ -33,16 +27,34 @@ http.interceptors.request.use(
 // 响应拦截器
 http.interceptors.response.use(
   response => response.data,
-  error => {
-    console.error('响应错误:', {
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message
+  async error => {
+    const config = error.config
+
+    if (!config || !config.retry) {
+      console.error('响应错误:', error)
+      ElMessage.error(error.response?.data?.message || '请求失败')
+      return Promise.reject(error)
+    }
+
+    config.__retryCount = config.__retryCount || 0
+
+    if (config.__retryCount >= config.retry) {
+      console.error('重试次数已用完:', error)
+      ElMessage.error('网络请求失败，请检查网络连接')
+      return Promise.reject(error)
+    }
+
+    config.__retryCount += 1
+    console.log(`正在进行第 ${config.__retryCount} 次重试`)
+
+    const backoff = new Promise(resolve => {
+      setTimeout(() => {
+        resolve()
+      }, config.retryDelay || 1000)
     })
 
-    const message = error.response?.data?.message || '请求失败'
-    ElMessage.error(message)
-    return Promise.reject(error)
+    await backoff
+    return http(config)
   }
 )
 

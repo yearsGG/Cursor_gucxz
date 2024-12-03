@@ -63,7 +63,7 @@
                   <el-dropdown-item v-if="userStore.userRole === 'admin'">
                     <router-link to="/admin" class="dropdown-link">
                       <el-icon><Setting /></el-icon>
-                      管理后台
+                      管理后
                     </router-link>
                   </el-dropdown-item>
                   <el-dropdown-item divided @click="logout">
@@ -78,6 +78,16 @@
             <el-icon><User /></el-icon>
             登录
           </router-link>
+          
+          <!-- 添加客服入口 -->
+          <el-button 
+            type="primary" 
+            plain
+            @click="showCustomerService = true"
+          >
+            <el-icon><Service /></el-icon>
+            在线客服
+          </el-button>
         </div>
       </nav>
     </el-header>
@@ -117,11 +127,26 @@
         <p>© 2024 汽车商城 版权所有</p>
       </div>
     </el-footer>
+
+    <!-- 添加客服对话框 -->
+    <el-dialog
+      v-model="showCustomerService"
+      title="智能客服"
+      width="500px"
+      :close-on-click-modal="false"
+      :before-close="handleCloseDialog"
+      destroy-on-close
+    >
+      <CustomerService 
+        :show="showCustomerService" 
+        @close="handleCloseDialog"
+      />
+    </el-dialog>
   </el-container>
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { 
@@ -136,10 +161,13 @@ import {
   ChatDotRound,
   Share,
   Shop,
-  Setting
+  Setting,
+  Service
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'
+import CustomerService from '@/components/CustomerService.vue'
+import eventBus from '@/utils/eventBus'
 
 // 初始化路由和状态管理
 const router = useRouter()
@@ -148,6 +176,26 @@ const userStore = useUserStore()
 // 搜索相关
 const searchQuery = ref('')
 const cartCount = ref(0)
+
+// 控制客服对话框显示
+const showCustomerService = ref(false)
+
+// 监听打开客服对话框事件
+onMounted(() => {
+  eventBus.on('open-customer-service', () => {
+    showCustomerService.value = true
+  })
+})
+
+// 组件卸载时移除事件监听
+onUnmounted(() => {
+  eventBus.off('open-customer-service')
+})
+
+// 处理对话框关闭
+const handleCloseDialog = () => {
+  showCustomerService.value = false
+}
 
 // 处理搜索
 const handleSearch = () => {
@@ -399,5 +447,20 @@ const handleAvatarError = (e) => {
 
 .el-dropdown-item .dropdown-link {
   padding: 5px 12px;
+}
+
+.el-dialog {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.customer-service-btn {
+  margin-left: 16px;
+}
+
+/* 确保对话框内容区域有合适的高度 */
+:deep(.el-dialog__body) {
+  padding: 0;
+  height: 600px;
 }
 </style> 

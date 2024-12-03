@@ -55,17 +55,25 @@ async function testDatabaseConnection() {
 // 添加错误处理中件
 app.use((err, req, res, next) => {
   console.error('服务器错误:', {
-    error: err,
+    error: err.message,
     stack: err.stack,
     url: req.url,
-    method: req.method,
-    headers: req.headers
+    method: req.method
   });
+  
+  // 根据错误类型返回适当的状态码
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({
+      message: '请求参数错误',
+      errors: err.errors
+    });
+  }
+  
   res.status(500).json({
-    message: '服务器错误',
+    message: '服务器内部错误',
     error: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
-})
+});
 
 const JWT_SECRET = 'your-secret-key'
 
@@ -286,7 +294,7 @@ app.get('/api/banners', async (req, res) => {
     res.json(rows)
   } catch (error) {
     console.error('获取轮播图失败:', error)
-    res.status(500).json({ message: '获���轮播图失败' })
+    res.status(500).json({ message: '获轮播图失败' })
   }
 })
 
@@ -698,6 +706,9 @@ app.use('/api/orders', ordersRouter);
 app.use('/api/user/cart', cartRouter);
 app.use('/api/user', userRouter);
 app.use('/api/admin', adminRouter);
+
+// 添加客服聊天路由
+app.use('/api/customer-service', require('./routes/customer-service'));
 
 // 添加静态文件服务
 app.use('/uploads', express.static(path.join(__dirname, '../public/uploads'), {

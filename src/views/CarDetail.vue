@@ -35,15 +35,19 @@
             <el-button type="primary" size="large" @click="addToCart">
               加入购物车
             </el-button>
-            <el-button size="large" @click="contactService">
-              联系客服
-            </el-button>
             <el-button 
               @click="toggleFavorite" 
               :type="isFavorited ? 'success' : 'warning'"
             >
               <i :class="isFavorited ? 'el-icon-star-on' : 'el-icon-star-off'"></i>
               {{ isFavorited ? '已收藏' : '收藏' }}
+            </el-button>
+            <el-button 
+              type="primary" 
+              icon="el-icon-service"
+              @click="openCustomerService"
+            >
+              咨询客服
             </el-button>
           </div>
         </div>
@@ -139,6 +143,7 @@ import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'
 import { formatDate } from '@/utils/format'
+import eventBus from '@/utils/eventBus'
 
 const route = useRoute()
 const router = useRouter()
@@ -210,10 +215,6 @@ const addToCart = async () => {
   } catch (error) {
     ElMessage.error('加入购物车失败')
   }
-}
-
-const contactService = () => {
-  ElMessage.info('正在连接客服...')
 }
 
 const fetchComments = async () => {
@@ -331,7 +332,7 @@ const getActionText = computed(() => {
   return texts[car.value.status] || '加入购物车'
 })
 
-// 获取状态类型
+// 获状态类型
 const getStatusType = (status) => {
   const types = {
     'available': 'success',
@@ -351,6 +352,10 @@ const getStatusText = (status) => {
     'discontinued': '已下架'
   }
   return texts[status] || status
+}
+
+const openCustomerService = () => {
+  eventBus.emit('open-customer-service')
 }
 </script>
 

@@ -73,6 +73,11 @@
         </template>
       </el-table-column>
     </el-table>
+    
+    <OrderDetailDialog
+      v-model:visible="showDetailDialog"
+      :order-id="currentOrderId"
+    />
   </div>
 </template>
 
@@ -81,10 +86,13 @@ import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from 'axios'
 import { formatDate } from '@/utils/format'
+import OrderDetailDialog from '@/components/OrderDetailDialog.vue'
 
 const orders = ref([])
 const loading = ref(false)
 const error = ref('')
+const showDetailDialog = ref(false)
+const currentOrderId = ref(null)
 
 const getStatusType = (status) => {
   const types = {
@@ -149,8 +157,8 @@ const cancelOrder = async (orderId) => {
 }
 
 const viewDetail = (orderId) => {
-  // TODO: 实现查看订单详情
-  console.log('查看订单:', orderId)
+  currentOrderId.value = orderId
+  showDetailDialog.value = true
 }
 
 const formatPrice = (price) => {
@@ -158,22 +166,16 @@ const formatPrice = (price) => {
 }
 
 const getCarImage = (item) => {
-  if (!item.car_image) {
-    return '/images/default-car.png'
+  if (item.car_images) {
+    const images = item.car_images.split(',');
+    return images[0];
   }
-  console.log('原始图片路径:', item.car_image);
-  console.log('图片信息:', {
-    car_image: item.car_image,
-    brand: item.brand,
-    car_name: item.car_name
-  });
-
-  if (item.car_image.startsWith('http')) {
-    return item.car_image
+  
+  if (item.car_image) {
+    return item.car_image;
   }
-
-  const carModel = item.car_name.toLowerCase();
-  return `/images/cars/benz/${carModel}-2.jpg`;
+  
+  return '/images/default-car.png';
 }
 
 const handleImageError = (e) => {

@@ -1,21 +1,26 @@
 {
-  "name": "car-mall-server",
+  "name": "server",
   "version": "1.0.0",
-  "description": "Car Mall Backend Server",
-  "main": "app.js",
+  "description": "Car Mall Server",
+  "main": "index.js",
   "scripts": {
+    "test": "node test.js",
     "start": "node app.js",
     "dev": "nodemon app.js"
   },
   "dependencies": {
     "axios": "^1.7.8",
     "bcryptjs": "^2.4.3",
-    "cors": "^2.8.5",
-    "express": "^4.17.1",
-    "jsonwebtoken": "^8.5.1",
-    "mysql2": "^2.3.0"
+    "express": "^4.21.1",
+    "jsonwebtoken": "^9.0.2",
+    "mitt": "^3.0.1",
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.11.5"
   },
   "devDependencies": {
-    "nodemon": "^2.0.22"
-  }
+    "nodemon": "^3.1.7"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }
