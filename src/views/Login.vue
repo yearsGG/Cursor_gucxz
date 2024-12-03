@@ -22,57 +22,68 @@
         </el-form-item>
 
         <el-form-item>
-          <el-button type="primary" @click="handleLogin" :loading="loading">
+          <el-button 
+            type="primary" 
+            @click="handleLogin" 
+            :loading="loading"
+            style="width: 100%"
+          >
             登录
           </el-button>
-          <router-link to="/register">
-            <el-button>注册账号</el-button>
-          </router-link>
         </el-form-item>
+
+        <div class="form-footer">
+          <router-link to="/register">还没有账号？立即注册</router-link>
+        </div>
       </el-form>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useUserStore } from '@/stores/user'  // 需要创建这个store
-import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import axios from 'axios'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
 const userStore = useUserStore()
 const formRef = ref(null)
 const loading = ref(false)
 
-const formData = reactive({
+const formData = ref({
   username: '',
   password: ''
 })
 
 const rules = {
   username: [
-    { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 20, message: '长度在 3 到 20 个字符', trigger: 'blur' }
+    { required: true, message: '请输入用户名', trigger: 'blur' }
   ],
   password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, max: 20, message: '长度在 6 到 20 个字符', trigger: 'blur' }
+    { required: true, message: '请输入密码', trigger: 'blur' }
   ]
 }
 
 const handleLogin = async () => {
+  if (!formRef.value) return
+  
   try {
     await formRef.value.validate()
     loading.value = true
     
     const response = await axios.post('/api/auth/login', {
-      username: formData.username,
-      password: formData.password
+      username: formData.value.username,
+      password: formData.value.password
     })
 
     const { token, user } = response.data
+    
+    // 打印详细的登录信息
+    console.log('登录响应:', response.data)
+    console.log('用户信息:', user)
+    console.log('用户角色:', user.role)
     
     // 保存token和用户信息
     userStore.setToken(token)
@@ -81,9 +92,28 @@ const handleLogin = async () => {
     // 设置axios默认header
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
     
+    // 打印store中的用户角色
+    console.log('Store中的用户角色:', userStore.userRole)
+    
     ElMessage.success('登录成功')
-    router.push('/')
+
+    // 根据角色跳转
+    if (userStore.userRole === 'admin') {
+      console.log('准备跳转到管理后台')
+      await router.push({
+        name: 'AdminDashboard',
+        replace: true
+      })
+    } else {
+      console.log('准备跳转到首页')
+      await router.push({
+        path: '/',
+        replace: true
+      })
+    }
+
   } catch (error) {
+    console.error('登录错误:', error)
     if (error.response?.status === 401) {
       ElMessage.error('用户名或密码错误')
     } else {
@@ -112,5 +142,19 @@ h2 {
   text-align: center;
   margin-bottom: 30px;
   color: #303133;
+}
+
+.form-footer {
+  text-align: center;
+  margin-top: 20px;
+}
+
+.form-footer a {
+  color: #409EFF;
+  text-decoration: none;
+}
+
+.form-footer a:hover {
+  color: #66b1ff;
 }
 </style> 

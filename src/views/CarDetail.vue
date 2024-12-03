@@ -312,6 +312,46 @@ watch(() => route.params.id, () => {
   fetchCarDetail()
   fetchComments()
 })
+
+// 判断是否可购买
+const isAvailable = computed(() => {
+  return ['available', 'low_stock'].includes(car.value?.status)
+})
+
+// 获取操作按钮文本
+const getActionText = computed(() => {
+  if (!car.value) return '加载中'
+  
+  const texts = {
+    'available': '加入购物车',
+    'low_stock': '库存紧张，立即购买',
+    'out_of_stock': '暂时缺货',
+    'discontinued': '已下架'
+  }
+  return texts[car.value.status] || '加入购物车'
+})
+
+// 获取状态类型
+const getStatusType = (status) => {
+  const types = {
+    'available': 'success',
+    'low_stock': 'warning',
+    'out_of_stock': 'danger',
+    'discontinued': 'info'
+  }
+  return types[status] || 'info'
+}
+
+// 获取状态文本
+const getStatusText = (status) => {
+  const texts = {
+    'available': '有货',
+    'low_stock': '库存紧张',
+    'out_of_stock': '缺货',
+    'discontinued': '已下架'
+  }
+  return texts[status] || status
+}
 </script>
 
 <style scoped>

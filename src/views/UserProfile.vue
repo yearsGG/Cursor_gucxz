@@ -233,17 +233,97 @@
         </el-tabs>
       </div>
     </transition>
+
+    <!-- 订单列表 -->
+    <div v-if="showOrders" class="orders-section">
+      <div v-if="orderLoading" class="loading">
+        <el-skeleton :rows="3" animated />
+      </div>
+      
+      <div v-else-if="orderError" class="error-message">
+        <el-alert
+          :title="orderError"
+          type="error"
+          show-icon
+        />
+      </div>
+      
+      <div v-else-if="!orders || orders.length === 0" class="empty-message">
+        
+      </div>
+      
+      <el-table v-if="orders && orders.length > 0" :data="orders" style="width: 100%">
+        <el-table-column prop="order_no" label="订单号" width="180">
+          <template #default="{ row }">
+            <span class="order-no">{{ row.order_no }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="商品" min-width="300">
+          <template #default="{ row }">
+            <div v-for="item in row.items" :key="item.id" class="order-item">
+              <img 
+                :src="getCarImage(item)" 
+                class="car-image"
+                @error="handleImageError"
+              >
+              <div class="item-info">
+                <div class="car-name">{{ item.brand }} {{ item.car_name }}</div>
+                <div class="price">¥{{ formatPrice(item.price) }}</div>
+                <div class="quantity">x{{ item.quantity }}</div>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="total_amount" label="总价" width="150">
+          <template #default="{ row }">
+            ¥{{ formatPrice(row.total_amount) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="status" label="状态" width="120">
+          <template #default="{ row }">
+            <el-tag :type="getStatusType(row.status)">
+              {{ getStatusText(row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="created_at" label="下单时间" width="180">
+          <template #default="{ row }">
+            {{ formatDate(row.created_at) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="120">
+          <template #default="{ row }">
+            <el-button 
+              v-if="row.status === 'pending'"
+              size="small" 
+              type="danger"
+              @click="cancelOrder(row.id)"
+            >
+              取消订单
+            </el-button>
+            <el-button
+              size="small"
+              type="primary"
+              @click="viewOrderDetail(row.id)"
+            >
+              查看详情
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
   </div>
 </template>
 
 <script>
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import axios from 'axios'
 import OrderList from '@/components/OrderList.vue'
-import { useRouter } from 'vue-router'
 import { formatDate } from '@/utils/format'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox, ElDialog, ElTag, ElTable, ElTableColumn } from 'element-plus'
+import { h } from 'vue'
 
 export default {
   name: 'UserProfile',
@@ -253,6 +333,7 @@ export default {
   setup() {
     const userStore = useUserStore()
     const router = useRouter()
+    const route = useRoute()
     const showDetails = ref(false)
     const showOrders = ref(false)
     const showFavorites = ref(false)
@@ -303,13 +384,14 @@ export default {
       }
     }
 
-    const toggleOrders = () => {
+    const toggleOrders = async () => {
       showOrders.value = !showOrders.value
       functionButtons.value[0].isActive = showOrders.value
+      showDetails.value = false
+      showMessages.value = false
+      showFavorites.value = false
       if (showOrders.value) {
-        showDetails.value = false
-        showFavorites.value = false
-        showMessages.value = false
+        await fetchOrders()
       }
     }
 
@@ -495,7 +577,7 @@ export default {
     const avatarInput = ref(null)
     const uploading = ref(false)
 
-    // 触发文件选择
+    // 触发件选择
     const triggerAvatarUpload = () => {
       avatarInput.value.click()
     }
@@ -554,6 +636,210 @@ export default {
       }
     }
 
+    // 格式化价格
+    const formatPrice = (price) => {
+      return Number(price || 0).toLocaleString()
+    }
+
+    // 获取车辆图片
+    const getCarImage = (item) => {
+      if (!item.car_image) {
+        return '/images/default-car.png'
+      }
+      console.log('原始图片路径:', item.car_image);
+      if (item.car_image.startsWith('http')) {
+        return item.car_image
+      }
+      // 处理相对路径
+      if (item.car_image.includes('benz') || item.car_image.includes('cars')) {
+        return item.car_image.startsWith('/') ? item.car_image : `/${item.car_image}`
+      }
+      // 处理其他情况
+      return `/images/cars/benz/${item.car_image}`
+    }
+
+    // 处理图片加载错误
+    const handleImageError = (e) => {
+      e.target.src = '/images/default-car.png'
+    }
+
+    // 订单状态类型
+    const getStatusType = (status) => {
+      const types = {
+        'pending': 'warning',
+        'paid': 'success',
+        'shipped': 'primary',
+        'completed': 'success',
+        'cancelled': 'info'
+      }
+      return types[status] || 'info'
+    }
+
+    // 订单状态文本
+    const getStatusText = (status) => {
+      const texts = {
+        'pending': '待付款',
+        'paid': '已付款',
+        'shipped': '已发货',
+        'completed': '已完成',
+        'cancelled': '已取消'
+      }
+      return texts[status] || status
+    }
+
+    // 取消订单
+    const cancelOrder = async (orderId) => {
+      try {
+        await ElMessageBox.confirm(
+          '确定要取消该订单吗？',
+          '提示',
+          {
+            confirmButtonText: '确定',
+            cancelButtonText: '取消',
+            type: 'warning'
+          }
+        )
+        
+        await axios.post(`/api/orders/${orderId}/cancel`)
+        ElMessage.success('订单已取消')
+        fetchOrders()
+      } catch (error) {
+        if (error !== 'cancel') {
+          console.error('取消订单失败:', error);
+          ElMessage.error(error.response?.data?.message || '取消订单失败')
+        }
+      }
+    }
+
+    // 查看订单详情
+    const viewOrderDetail = async (orderId) => {
+      try {
+        const response = await axios.get(`/api/orders/${orderId}`)
+        ElMessageBox({
+          title: '订单详情',
+          width: '90%',
+          customClass: 'order-detail-dialog wide-dialog',
+          dangerouslyHtmlString: true,
+          message: h('div', { class: 'order-detail' }, [
+            h('div', { class: 'detail-layout' }, [
+              // 订单信息部分
+              h('div', { class: 'info-section' }, [
+                h('h3', '订单信息'),
+                h('div', { class: 'info-list' }, [
+                  h('div', { class: 'info-item' }, [
+                    h('span', { class: 'label' }, '订单号：'),
+                    h('span', { class: 'value' }, response.data.order_no)
+                  ]),
+                  h('div', { class: 'info-item' }, [
+                    h('span', { class: 'label' }, '下单时间：'),
+                    h('span', { class: 'value' }, formatDate(response.data.created_at))
+                  ]),
+                  h('div', { class: 'info-item' }, [
+                    h('span', { class: 'label' }, '订单状态：'),
+                    h(ElTag, { 
+                      type: getStatusType(response.data.status),
+                      class: 'status-tag'
+                    }, () => getStatusText(response.data.status))
+                  ]),
+                  h('div', { class: 'info-item' }, [
+                    h('span', { class: 'label' }, '订单金额：'),
+                    h('span', { class: 'price' }, `¥${formatPrice(response.data.total_amount)}`)
+                  ])
+                ])
+              ]),
+              
+              // 商品列表部分
+              h('div', { class: 'products-section' }, [
+                h('h3', '商品信息'),
+                h(ElTable, { 
+                  data: response.data.items, 
+                  border: true,
+                  class: 'detail-table',
+                  height: '400px',  // 固定表格高度
+                  default: () => [
+                    h(ElTableColumn, { 
+                      label: '商品', 
+                      minWidth: '500',  // 增加商品列宽度
+                      default: ({ row: item }) => h('div', { class: 'product-info' }, [
+                        h('img', {
+                          src: getCarImage(item),
+                          class: 'product-image',
+                          style: {
+                            width: '160px',  // 增加图片宽度
+                            height: '120px'  // 增加图片高度
+                          },
+                          onError: handleImageError
+                        }),
+                        h('div', { class: 'product-detail' }, [
+                          h('div', { class: 'product-name' }, `${item.brand} ${item.car_name}`),
+                          h('div', { class: 'product-price' }, `¥${formatPrice(item.price)}`)
+                        ])
+                      ])
+                    }),
+                    h(ElTableColumn, { 
+                      prop: 'quantity', 
+                      label: '数量', 
+                      width: '100', 
+                      align: 'center',
+                      class: 'quantity-column'
+                    }),
+                    h(ElTableColumn, { 
+                      label: '小计', 
+                      width: '150', 
+                      align: 'right',
+                      class: 'subtotal-column'
+                    }, {
+                      default: ({ row: item }) => h('span', { 
+                        class: 'subtotal' 
+                      }, `¥${formatPrice(item.price * item.quantity)}`)
+                    })
+                  ]
+                })
+              ])
+            ])
+          ])
+        })
+      } catch (error) {
+        console.error('获取订单详情失败:', error)
+        ElMessage.error('获取订单详情失败')
+      }
+    }
+
+    // 添加订单相关的响应式变量
+    const orders = ref([])
+    const orderLoading = ref(false)
+    const orderError = ref('')
+
+    // 获取订单列表
+    const fetchOrders = async () => {
+      orderLoading.value = true
+      orderError.value = ''
+      try {
+        const response = await axios.get('/api/orders')
+        console.log('获取到的订单数据:', response.data)
+        if (Array.isArray(response.data)) {
+          orders.value = response.data
+        } else {
+          orders.value = []
+          console.error('订单数据格式错误:', response.data)
+        }
+      } catch (error) {
+        console.error('获取订单列表失败:', error)
+        orderError.value = '获取订单列表失败，请稍后重试'
+        ElMessage.error('获取订单列表失败')
+        orders.value = []
+      } finally {
+        orderLoading.value = false
+      }
+    }
+
+    // 在组件挂载时自动刷新订单列表
+    onMounted(() => {
+      if (route.query.tab === 'orders') {
+        fetchOrders()
+      }
+    })
+
     return {
       userInfo,
       messages,
@@ -584,7 +870,19 @@ export default {
       avatarInput,
       uploading,
       triggerAvatarUpload,
-      handleAvatarChange
+      handleAvatarChange,
+      formatPrice,
+      getCarImage,
+      handleImageError,
+      getStatusType,
+      getStatusText,
+      cancelOrder,
+      viewOrderDetail,
+      orders,
+      orderLoading,
+      orderError,
+      fetchOrders,
+      route
     }
   },
 
@@ -951,8 +1249,12 @@ button {
 
 .empty-message {
   text-align: center;
+  padding: 40px;
   color: #909399;
-  padding: 20px;
+  font-size: 16px;
+  background: #fff;
+  border-radius: 8px;
+  margin: 20px 0;
 }
 
 .likes-count {
@@ -1045,7 +1347,7 @@ button {
   user-select: none;
 }
 
-/* 修改表单元素样式，添加浏览器前缀 */
+/* 修改表单素样式，添加浏览器前缀 */
 input {
   -webkit-appearance: none;
   -moz-appearance: none;
@@ -1101,7 +1403,7 @@ input:focus {
   position: relative;
 }
 
-/* 添加输入框过渡效果 */
+/* 添加输入过渡效果 */
 input {
   transition: all 0.3s ease;
   border: 1px solid #dcdfe6;
@@ -1150,5 +1452,290 @@ input::-moz-placeholder {
   object-fit: cover;
   border: 2px solid #dcdfe6;
   box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1);
+}
+
+.order-item {
+  display: flex;
+  gap: 15px;
+  margin: 10px 0;
+}
+
+.car-image {
+  width: 80px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 4px;
+  background-color: #f5f7fa;
+}
+
+.item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.price {
+  color: #f56c6c;
+  font-weight: bold;
+}
+
+.car-name {
+  font-weight: 500;
+  color: #303133;
+}
+
+.quantity {
+  color: #909399;
+}
+
+.car-image:not([src]),
+.car-image[src=""] {
+  background: #f5f7fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #909399;
+  font-size: 12px;
+}
+
+.car-image:not([src])::after,
+.car-image[src=""]::after {
+  content: "暂无图片";
+}
+
+.order-no {
+  font-family: monospace;
+  color: #606266;
+}
+
+.loading {
+  padding: 20px;
+  text-align: center;
+}
+
+.error-message {
+  padding: 20px;
+}
+
+.orders-section {
+  margin-top: 20px;
+  padding: 20px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1);
+}
+
+/* 订单详情对话框样式 */
+:deep(.order-detail-dialog) {
+  .el-dialog__body {
+    padding: 0;
+  }
+
+  .el-dialog__header {
+    padding: 20px;
+    border-bottom: 1px solid #ebeef5;
+  }
+
+  .el-dialog__body {
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+}
+
+.order-detail {
+  padding: 20px;
+}
+
+.detail-layout {
+  display: flex;
+  flex-direction: row;
+  gap: 30px;
+  height: 100%;
+}
+
+.info-section {
+  width: 300px;
+  flex-shrink: 0;
+  border-right: 1px solid #ebeef5;
+  padding-right: 20px;
+}
+
+.products-section {
+  flex: 1;
+  overflow: hidden;
+}
+
+.info-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+.product-info {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 15px;
+  width: 100%;
+}
+
+.product-image {
+  width: 160px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 4px;
+  background-color: #f5f7fa;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease;
+
+  &:hover {
+    transform: scale(1.05);
+  }
+}
+
+.product-detail {
+  flex: 1;
+  padding: 10px;
+
+  .product-name {
+    font-weight: 500;
+    color: #303133;
+    margin-bottom: 10px;
+    font-size: 16px;
+    line-height: 1.4;
+  }
+
+  .product-price {
+    color: #f56c6c;
+    font-weight: bold;
+    font-size: 18px;
+  }
+}
+
+.detail-table {
+  margin-top: 20px;
+  width: 100%;
+  border-radius: 4px;
+  overflow: hidden;
+  height: 100%;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+
+  :deep(.el-table__header-wrapper) {
+    th {
+      background-color: #f5f7fa;
+      font-weight: 600;
+    }
+  }
+
+  :deep(.el-table__body-wrapper) {
+    td {
+      padding: 12px;
+    }
+  }
+}
+
+/* 宽屏对话框样式 */
+:deep(.wide-dialog) {
+  .el-dialog {
+    margin-top: 5vh !important;
+  }
+
+  .el-dialog__body {
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 20px !important;
+  }
+}
+
+.order-detail {
+  padding: 0;
+}
+
+.detail-layout {
+  display: flex;
+  flex-direction: row;
+  gap: 30px;
+  height: 100%;
+}
+
+.info-section {
+  width: 300px;
+  flex-shrink: 0;
+  border-right: 1px solid #ebeef5;
+  padding-right: 20px;
+}
+
+.products-section {
+  flex: 1;
+  overflow: hidden;
+}
+
+.info-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+.product-info {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 15px;
+  width: 100%;
+}
+
+.product-image {
+  width: 160px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 4px;
+  background-color: #f5f7fa;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease;
+
+  &:hover {
+    transform: scale(1.05);
+  }
+}
+
+.product-detail {
+  flex: 1;
+  padding: 10px;
+
+  .product-name {
+    font-weight: 500;
+    color: #303133;
+    margin-bottom: 10px;
+    font-size: 16px;
+    line-height: 1.4;
+  }
+
+  .product-price {
+    color: #f56c6c;
+    font-weight: bold;
+    font-size: 18px;
+  }
+}
+
+.detail-table {
+  margin-top: 20px;
+  width: 100%;
+  border-radius: 4px;
+  overflow: hidden;
+  height: 100%;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+
+  :deep(.el-table__header-wrapper) {
+    th {
+      background-color: #f5f7fa;
+      font-weight: 600;
+    }
+  }
+
+  :deep(.el-table__body-wrapper) {
+    td {
+      padding: 12px;
+    }
+  }
 }
 </style> 

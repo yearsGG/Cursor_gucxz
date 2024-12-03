@@ -7,7 +7,7 @@
           加载中...
         </div>
         <div v-else-if="orders.length === 0" class="no-orders">
-          暂无订单
+          <!-- 暂无订单 -->
         </div>
         <div v-else class="orders">
           <div v-for="order in orders" :key="order.id" class="order-item">

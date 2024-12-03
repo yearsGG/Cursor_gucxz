@@ -99,7 +99,7 @@ CREATE TABLE `cars`  (
   `seats` int NULL DEFAULT NULL,
   `fuel_type` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL,
   `images` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
-  `status` enum('available','sold_out','upcoming') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT 'available',
+  `status` enum('available','low_stock','out_of_stock','discontinued') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'available',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
@@ -319,4 +319,52 @@ CREATE TABLE `users`  (
 -- Records of users
 -- ----------------------------
 
+-- 添加订单统计视图
+CREATE OR REPLACE VIEW order_stats AS
+SELECT 
+  DATE(created_at) as order_date,
+  COUNT(*) as order_count,
+  SUM(total_amount) as total_sales,
+  COUNT(DISTINCT user_id) as unique_customers
+FROM orders
+GROUP BY DATE(created_at);
+
+-- 添加订单状态索引
+ALTER TABLE orders ADD INDEX idx_status (status);
+ALTER TABLE orders ADD INDEX idx_created_at (created_at);
+
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- 订单表
+CREATE TABLE IF NOT EXISTS `orders` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `order_no` varchar(50) NOT NULL COMMENT '订单号',
+  `user_id` int NOT NULL COMMENT '用户ID',
+  `total_amount` decimal(10,2) NOT NULL COMMENT '订单总金额',
+  `status` enum('pending','paid','shipped','completed','cancelled') NOT NULL DEFAULT 'pending' COMMENT '订单状态',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `order_no` (`order_no`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_created_at` (`created_at`),
+  CONSTRAINT `fk_orders_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 订单项表
+CREATE TABLE IF NOT EXISTS `order_items` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `order_id` int NOT NULL COMMENT '订单ID',
+  `car_id` int NOT NULL COMMENT '车辆ID',
+  `car_name` varchar(100) NOT NULL COMMENT '车辆名称',
+  `car_image` varchar(255) DEFAULT NULL COMMENT '车辆图片',
+  `price` decimal(10,2) NOT NULL COMMENT '购买时价格',
+  `quantity` int NOT NULL DEFAULT '1' COMMENT '购买数量',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_order_id` (`order_id`),
+  KEY `idx_car_id` (`car_id`),
+  CONSTRAINT `fk_order_items_order` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_order_items_car` FOREIGN KEY (`car_id`) REFERENCES `cars` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

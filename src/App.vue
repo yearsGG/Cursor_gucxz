@@ -60,6 +60,12 @@
                     <el-icon><List /></el-icon>
                     我的订单
                   </el-dropdown-item>
+                  <el-dropdown-item v-if="userStore.userRole === 'admin'">
+                    <router-link to="/admin" class="dropdown-link">
+                      <el-icon><Setting /></el-icon>
+                      管理后台
+                    </router-link>
+                  </el-dropdown-item>
                   <el-dropdown-item divided @click="logout">
                     <el-icon><SwitchButton /></el-icon>
                     退出登录
@@ -129,7 +135,8 @@ import {
   Platform,
   ChatDotRound,
   Share,
-  Shop
+  Shop,
+  Setting
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'

@@ -11,6 +11,9 @@ const authRouter = require('./routes/auth');
 const multer = require('multer')
 const fs = require('fs')
 const userRouter = require('./routes/user')
+const adminRouter = require('./routes/admin');
+const ordersRouter = require('./routes/orders');
+const cartRouter = require('./routes/cart');
 
 
 const app = express()
@@ -283,11 +286,11 @@ app.get('/api/banners', async (req, res) => {
     res.json(rows)
   } catch (error) {
     console.error('获取轮播图失败:', error)
-    res.status(500).json({ message: '获取轮播图失败' })
+    res.status(500).json({ message: '获���轮播图失败' })
   }
 })
 
-// 1. 先定义搜索路由（必须放在其他具体路由之前）
+// 1. 先定义搜索路由（必须放在其他具体路由）
 app.get('/api/cars/search', async (req, res, next) => {
   const connection = await pool.getConnection()
   try {
@@ -691,10 +694,26 @@ app.get('/api/cars/brand/:brandName', async (req, res) => {
 app.use('/api/favorites', favoritesRouter);
 app.use('/api/comments', commentsRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/orders', ordersRouter);
+app.use('/api/user/cart', cartRouter);
 app.use('/api/user', userRouter);
+app.use('/api/admin', adminRouter);
 
 // 添加静态文件服务
 app.use('/uploads', express.static(path.join(__dirname, '../public/uploads'), {
+  etag: false,
+  maxAge: 0,
+  setHeaders: (res) => {
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+  }
+}));
+
+// 添加静态文件服务
+app.use('/images', express.static(path.join(__dirname, '../public/images'), {
   etag: false,
   maxAge: 0,
   setHeaders: (res) => {
@@ -711,7 +730,8 @@ function ensureUploadDirs() {
   const dirs = [
     path.join(__dirname, '../public'),
     path.join(__dirname, '../public/uploads'),
-    path.join(__dirname, '../public/uploads/avatars')
+    path.join(__dirname, '../public/uploads/avatars'),
+    path.join(__dirname, '../public/uploads/cars')
   ]
 
   dirs.forEach(dir => {

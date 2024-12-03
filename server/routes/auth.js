@@ -51,4 +51,61 @@ router.post('/register', async (req, res) => {
   }
 });
 
+// 用户登录
+router.post('/api/auth/login', async (req, res) => {
+  const connection = await pool.getConnection()
+  try {
+    const { username, password } = req.body
+
+    // 获取用户信息（包括头像和角色）
+    const [users] = await connection.query(
+      'SELECT id, username, password, email, avatar, role FROM users WHERE username = ?',
+      [username]
+    )
+
+    if (users.length === 0) {
+      return res.status(401).json({ message: '用户名或密码错误' })
+    }
+
+    const user = users[0]
+    const validPassword = await bcrypt.compare(password, user.password)
+
+    if (!validPassword) {
+      return res.status(401).json({ message: '用户名或密码错误' })
+    }
+
+    // 生成token
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET)
+
+    // 不返回密码
+    delete user.password
+
+    // 确保管理员角色正确设置
+    if (username === 'admin') {
+      user.role = 'admin'
+    }
+
+    console.log('登录返回的用户信息:', {
+      ...user,
+      password: undefined
+    })
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        avatar: user.avatar,
+        role: user.role || 'user' // 确保有默认角色
+      }
+    })
+  } catch (error) {
+    console.error('登录失败:', error)
+    res.status(500).json({ message: '登录失败' })
+  } finally {
+    connection.release()
+  }
+})
+
 module.exports = router; 

@@ -1,170 +1,195 @@
 <template>
   <div class="search-results">
     <div class="search-header">
-      <h2>搜索结果: "{{ searchQuery }}"</h2>
+      <h2>搜索结果</h2>
       <div class="search-filters">
-        <el-select v-model="sortBy" placeholder="排序方式" @change="handleSort">
+        <el-select 
+          v-model="sortOption" 
+          placeholder="排序方式"
+          @change="handleSortChange"
+        >
+          <el-option label="默认排序" value="" />
           <el-option label="价格从低到高" value="price_asc" />
           <el-option label="价格从高到低" value="price_desc" />
           <el-option label="最新上架" value="newest" />
         </el-select>
-        
-        <el-select v-model="selectedBrand" placeholder="品牌筛选" @change="handleFilter">
+
+        <el-select 
+          v-model="selectedBrand" 
+          placeholder="品牌筛选"
+          @change="handleBrandChange"
+        >
           <el-option label="全部品牌" value="" />
-          <el-option
-            v-for="brand in brands"
-            :key="brand.id"
-            :label="brand.name"
+          <el-option 
+            v-for="brand in brands" 
+            :key="brand.id" 
+            :label="brand.name" 
             :value="brand.name"
           />
         </el-select>
       </div>
     </div>
 
-    <div v-if="loading" class="loading-state">
-      <el-skeleton :rows="3" animated />
+    <div v-if="loading" class="loading">
+      <el-skeleton :rows="5" animated />
     </div>
 
-    <div v-else-if="cars.length === 0" class="empty-state">
-      <el-empty description="未找到相关商品">
-        <template #extra>
-          <el-button type="primary" @click="$router.push('/')">返回首页</el-button>
-        </template>
-      </el-empty>
+    <div v-else-if="error" class="error">
+      {{ error }}
+    </div>
+
+    <div v-else-if="noResults" class="no-results">
+      暂无搜索结果
     </div>
 
     <div v-else class="search-results-list">
-      <el-card 
-        v-for="car in cars" 
-        :key="car.id" 
-        class="car-item"
-        @click="goToDetail(car.id)"
-      >
-        <div class="car-content">
-          <div class="car-image-wrapper">
-            <img 
-              :src="getCarImage(car.images)"
-              class="car-image"
-              :alt="car.model"
-            >
-            <div class="car-tags">
-              <el-tag v-if="car.stock <= 3" type="danger">库存紧张</el-tag>
-              <el-tag v-if="car.category === 'electric'" type="success">新能源</el-tag>
-            </div>
-          </div>
-
-          <div class="car-details">
-            <h3>{{ car.brand }} {{ car.model }}</h3>
-            <div class="car-specs">
-              <el-tag>{{ car.year }}年</el-tag>
-              <el-tag>{{ car.mileage }}公里</el-tag>
-              <el-tag>{{ car.color }}</el-tag>
-              <el-tag>{{ car.engine_type }}</el-tag>
-              <el-tag>{{ car.transmission }}</el-tag>
-              <el-tag>{{ car.fuel_type }}</el-tag>
-            </div>
-            <p class="car-description">{{ car.description }}</p>
-          </div>
-
+      <div v-for="car in displayResults" :key="car.id" class="car-item">
+        <div class="car-image">
+          <img :src="getCarImage(car)" @error="handleImageError">
+        </div>
+        <div class="car-info">
+          <h3>{{ car.brand }} {{ car.model }}</h3>
+          <p class="car-price">¥{{ formatPrice(car.price) }}</p>
+          <p class="car-details">{{ car.year }}年 | {{ car.color }}</p>
           <div class="car-actions">
-            <span class="price">¥{{ formatPrice(car.price) }}</span>
-            <div class="action-buttons">
-              <el-button 
-                type="primary" 
-                @click.stop="addToCart(car)"
-                :loading="loading"
-              >
-                加入购物车
-              </el-button>
-              <el-button @click.stop="goToDetail(car.id)">
-                查看详情
-              </el-button>
-            </div>
+            <el-button type="primary" @click="viewDetail(car.id)">查看详情</el-button>
+            <el-button @click="addToCart(car)">加入购物车</el-button>
           </div>
         </div>
-      </el-card>
+      </div>
     </div>
 
-    <div class="pagination">
-      <el-pagination
-        v-model:current-page="currentPage"
-        v-model:page-size="pageSize"
-        :total="total"
-        :page-sizes="[12, 24, 36, 48]"
-        layout="total, sizes, prev, pager, next"
-        @size-change="handleSizeChange"
-        @current-change="handleCurrentChange"
-        background
-      />
-    </div>
+    <el-pagination
+      v-if="total > 0"
+      v-model:current-page="currentPage"
+      v-model:page-size="pageSize"
+      :total="total"
+      :page-sizes="[12, 24, 36, 48]"
+      layout="total, sizes, prev, pager, next"
+      @size-change="handlePageSizeChange"
+      @current-change="handlePageChange"
+      background
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useUserStore } from '@/stores/user'
-import { ElMessage } from 'element-plus'
 import axios from 'axios'
+import { ElMessage } from 'element-plus'
 
 const route = useRoute()
 const router = useRouter()
-const userStore = useUserStore()
-
-// 响应式数据
-const cars = ref([])
-const brands = ref([])
 const loading = ref(false)
+const error = ref(null)
+const results = ref([]) // 存储搜索结果
 const currentPage = ref(1)
 const pageSize = ref(12)
 const total = ref(0)
-const sortBy = ref('')
 const selectedBrand = ref('')
+const sortOption = ref('')
 
-// 获取搜索关键词
-const searchQuery = computed(() => route.query.q || '')
+// 计算属性
+const displayResults = computed(() => {
+  return results.value
+})
 
-// 格式化价格
-const formatPrice = (price) => {
-  return price?.toLocaleString() || '0'
-}
+const hasResults = computed(() => {
+  return results.value && results.value.length > 0
+})
 
-// 获取图片URL
-const getCarImage = (images) => {
-  return images ? images.split(',')[0] : '/images/default-car.jpg'
-}
+const noResults = computed(() => {
+  return !loading.value && (!results.value || results.value.length === 0)
+})
 
-// 获取搜索结果
+// 搜索方法
 const fetchSearchResults = async () => {
   loading.value = true
+  error.value = null
+  
   try {
     console.log('发起搜索请求:', {
-      q: searchQuery.value,
+      q: route.query.q,
       page: currentPage.value,
       pageSize: pageSize.value,
-      sort: sortBy.value,
+      sort: sortOption.value,
       brand: selectedBrand.value
     })
-
-    const { data } = await axios.get('/api/cars/search', {
+    
+    const response = await axios.get('/api/cars/search', {
       params: {
-        q: searchQuery.value,
+        q: route.query.q,
         page: currentPage.value,
         pageSize: pageSize.value,
-        sort: sortBy.value,
+        sort: sortOption.value,
         brand: selectedBrand.value
       }
     })
-
-    console.log('搜索结果:', data)
-    cars.value = data.items
-    total.value = data.total
+    
+    console.log('搜索结果:', response.data)
+    results.value = response.data.items
+    total.value = response.data.total
+    
   } catch (error) {
     console.error('搜索失败:', error)
-    ElMessage.error('搜索失败: ' + error.message)
+    error.value = '搜索失败，请稍后重试'
+    ElMessage.error('搜索失败')
   } finally {
     loading.value = false
   }
+}
+
+// 监听路由参数变化
+watch(
+  () => route.query,
+  () => {
+    fetchSearchResults()
+  },
+  { immediate: true }
+)
+
+// 处理排序变化
+const handleSortChange = (value) => {
+  sortOption.value = value
+  fetchSearchResults()
+}
+
+// 处理品牌筛选变化
+const handleBrandChange = (value) => {
+  selectedBrand.value = value
+  fetchSearchResults()
+}
+
+// 处理分页变化
+const handlePageChange = (page) => {
+  currentPage.value = page
+  fetchSearchResults()
+}
+
+// 添加缺失的方法和变量
+const brands = ref([])
+const getCarImage = (car) => {
+  if (!car.images) return '/images/default-car.jpg'
+  return car.images.split(',')[0]
+}
+
+const handleImageError = (e) => {
+  e.target.src = '/images/default-car.jpg'
+}
+
+const formatPrice = (price) => {
+  return Number(price).toLocaleString()
+}
+
+const viewDetail = (carId) => {
+  router.push(`/car/${carId}`)
+}
+
+const handlePageSizeChange = (size) => {
+  pageSize.value = size
+  currentPage.value = 1
+  fetchSearchResults()
 }
 
 // 获取品牌列表
@@ -177,64 +202,6 @@ const fetchBrands = async () => {
   }
 }
 
-// 处理排序
-const handleSort = () => {
-  currentPage.value = 1
-  fetchSearchResults()
-}
-
-// 处理筛选
-const handleFilter = () => {
-  currentPage.value = 1
-  fetchSearchResults()
-}
-
-// 分页处理
-const handleSizeChange = (val) => {
-  pageSize.value = val
-  fetchSearchResults()
-}
-
-const handleCurrentChange = (val) => {
-  currentPage.value = val
-  fetchSearchResults()
-}
-
-// 加入购物车
-const addToCart = async (car) => {
-  if (!userStore.isLoggedIn) {
-    ElMessage.warning('请先登录')
-    router.push('/login')
-    return
-  }
-
-  try {
-    await axios.post('/api/cart', {
-      carId: car.id,
-      quantity: 1
-    })
-    ElMessage.success('已加入购物车')
-  } catch (error) {
-    ElMessage.error('加入购物车失败')
-  }
-}
-
-// 跳转到详情页
-const goToDetail = (carId) => {
-  router.push(`/car/${carId}`)
-}
-
-// 监听路由参数变化
-watch(
-  () => route.query,
-  () => {
-    currentPage.value = 1
-    fetchSearchResults()
-  },
-  { deep: true }
-)
-
-// 页面加载
 onMounted(() => {
   fetchBrands()
   fetchSearchResults()
@@ -250,117 +217,116 @@ onMounted(() => {
 
 .search-header {
   margin-bottom: 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .search-header h2 {
-  margin-bottom: 20px;
   color: #303133;
+  font-size: 24px;
+  font-weight: 600;
 }
 
 .search-filters {
   display: flex;
   gap: 20px;
-  margin-bottom: 20px;
+}
+
+.loading {
+  padding: 40px;
+  text-align: center;
+}
+
+.no-results {
+  padding: 60px;
+  text-align: center;
+  color: #909399;
+  font-size: 16px;
+}
+
+.error {
+  padding: 20px;
+  color: #f56c6c;
+  text-align: center;
 }
 
 /* 列表样式 */
 .search-results-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 20px;
+  margin-bottom: 30px;
 }
 
 .car-item {
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
   cursor: pointer;
   transition: all 0.3s;
 }
 
 .car-item:hover {
-  transform: translateX(5px);
+  transform: translateY(-5px);
   box-shadow: 0 6px 16px rgba(0,0,0,0.1);
-}
-
-.car-content {
-  display: flex;
-  gap: 20px;
-}
-
-.car-image-wrapper {
-  width: 300px;
-  height: 200px;
-  position: relative;
-  flex-shrink: 0;
 }
 
 .car-image {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 8px;
+  height: 200px;
+  overflow: hidden;
 }
 
-.car-tags {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  display: flex;
-  gap: 8px;
+.car-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s;
+}
+
+.car-item:hover .car-image img {
+  transform: scale(1.05);
+}
+
+.car-info {
+  padding: 15px;
+}
+
+.car-info h3 {
+  margin: 0 0 10px;
+  font-size: 18px;
+  color: #303133;
+  font-weight: 600;
+}
+
+.car-price {
+  color: #f56c6c;
+  font-size: 20px;
+  font-weight: bold;
+  margin: 10px 0;
 }
 
 .car-details {
-  flex: 1;
-  padding: 10px 0;
-}
-
-.car-details h3 {
-  font-size: 20px;
-  margin-bottom: 15px;
-  color: #303133;
-}
-
-.car-specs {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 15px;
-}
-
-.car-description {
-  color: #666;
+  color: #909399;
   font-size: 14px;
-  line-height: 1.6;
+  margin-bottom: 15px;
 }
 
 .car-actions {
   display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: flex-end;
-  padding: 10px 0;
-  min-width: 150px;
-}
-
-.price {
-  color: #f56c6c;
-  font-size: 24px;
-  font-weight: bold;
-}
-
-.action-buttons {
-  display: flex;
-  flex-direction: column;
   gap: 10px;
-}
-
-.pagination {
-  display: flex;
   justify-content: center;
-  margin-top: 30px;
 }
 
-.loading-state,
-.empty-state {
-  padding: 40px;
-  text-align: center;
+.car-actions .el-button {
+  flex: 1;
+}
+
+/* 分页样式 */
+:deep(.el-pagination) {
+  margin-top: 30px;
+  justify-content: center;
 }
 </style> 

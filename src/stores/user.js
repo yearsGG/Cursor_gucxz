@@ -6,6 +6,11 @@ export const useUserStore = defineStore('user', {
     user: JSON.parse(localStorage.getItem('user') || 'null')
   }),
 
+  getters: {
+    isLoggedIn: (state) => !!state.token,
+    userRole: (state) => state.user?.role || 'guest'
+  },
+
   actions: {
     setToken(token) {
       this.token = token
@@ -13,11 +18,6 @@ export const useUserStore = defineStore('user', {
     },
 
     setUser(user) {
-      if (user && user.avatar) {
-        if (!user.avatar.startsWith('http')) {
-          user.avatar = `http://localhost:3000${user.avatar}`
-        }
-      }
       this.user = user
       localStorage.setItem('user', JSON.stringify(user))
     },
@@ -28,10 +28,5 @@ export const useUserStore = defineStore('user', {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
     }
-  },
-
-  getters: {
-    isLoggedIn: (state) => !!state.token,
-    userRole: (state) => state.user?.role || 'guest'
   }
 }) 
