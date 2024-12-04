@@ -215,6 +215,13 @@ router.post('/', auth, async (req, res) => {
       const car = cars[0];
       const carImage = car.images ? car.images.split(',')[0] : '/images/default-car.jpg';
       
+      // 添加库存检查
+      if (car.stock <= 0) {
+        return res.status(400).json({
+          error: '商品已无货'
+        })
+      }
+      
       // 添加订单项
       await connection.query(
         `INSERT INTO order_items 
@@ -228,6 +235,19 @@ router.post('/', auth, async (req, res) => {
         'UPDATE cars SET stock = stock - ? WHERE id = ?',
         [item.quantity, item.car_id]
       );
+
+      // 如果库存为0，自动更新状态为已下架
+      const [updatedCar] = await connection.query(
+        'SELECT stock FROM cars WHERE id = ?',
+        [item.car_id]
+      );
+
+      if (updatedCar[0].stock === 0) {
+        await connection.query(
+          'UPDATE cars SET status = ? WHERE id = ?',
+          ['discontinued', item.car_id]
+        );
+      }
     }
     
     // 清空用户购物车
@@ -244,6 +264,13 @@ router.post('/', auth, async (req, res) => {
     }
     
     await connection.commit();
+
+    // 发送 WebSocket 消息通知前端更新
+    req.app.get('io').emit('carUpdate', {
+      type: 'stockChanged',
+      carIds: orderItems.map(item => item.car_id)
+    });
+
     res.json({
       message: '订单创建成功',
       orderId,

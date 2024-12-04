@@ -5,20 +5,55 @@
       <p>状态统计: {{ statusCount }}</p>
     </div>
 
-    <div v-for="car in cars" :key="car.id" class="car-item">
-      <div class="car-status" v-if="car.status !== 'available'">
-        <el-tag :type="getStatusType(car.status)">
-          {{ getStatusText(car.status) }}
-        </el-tag>
+    <div class="cars-grid">
+      <div 
+        v-for="car in displayCars" 
+        :key="car.id" 
+        class="car-card"
+        @click="handleCarClick(car)"
+      >
+        <div class="car-info">
+          <div class="car-status">
+            <el-tag :type="getStatusType(car)">
+              {{ getStatusText(car) }}
+            </el-tag>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref, onUnmounted } from 'vue'
+import axios from 'axios'
+import { useEventBus } from '@/utils/eventBus'
+import { useSocket } from '@/composables/useSocket'
 
 const isDev = process.env.NODE_ENV === 'development'
+const cars = ref([])
+const eventBus = useEventBus()
+const socket = useSocket()
+
+// 添加获取车辆列表的方法
+const fetchCars = async () => {
+  try {
+    const response = await axios.get('/api/cars')
+    cars.value = response.data
+  } catch (error) {
+    console.error('获取车辆列表失败:', error)
+  }
+}
+
+// 监听车辆状态变化事件
+eventBus.on('carStatusChanged', () => {
+  fetchCars()
+})
+
+// 监听库存变化事件
+eventBus.on('carStockChanged', () => {
+  fetchCars()
+})
 
 const statusCount = computed(() => {
   return cars.value.reduce((acc, car) => {
@@ -27,25 +62,40 @@ const statusCount = computed(() => {
   }, {})
 })
 
-const getStatusType = (status) => {
-  const types = {
-    'available': 'success',
-    'low_stock': 'warning',
-    'out_of_stock': 'danger',
-    'discontinued': 'info'
-  }
-  return types[status] || 'info'
+const displayCars = computed(() => {
+  return cars.value.filter(car => 
+    car.status === 'available' && car.stock > 0
+  )
+})
+
+const getStatusType = (car) => {
+  if (car.stock === 0) return 'info'
+  return car.status === 'available' ? 'success' : 'info'
 }
 
-const getStatusText = (status) => {
-  const texts = {
-    'available': '有货',
-    'low_stock': '库存紧张',
-    'out_of_stock': '缺货',
-    'discontinued': '已下架'
-  }
-  return texts[status] || status
+const getStatusText = (car) => {
+  if (car.stock === 0) return '无货'
+  return car.status === 'available' ? '有货' : '已下架'
 }
+
+// 添加 WebSocket 监听
+socket.on('carUpdate', (data) => {
+  if (data.type === 'stockChanged') {
+    fetchCars()
+  }
+})
+
+// 初始化
+onMounted(() => {
+  fetchCars()
+})
+
+// 组件销毁时清理
+onUnmounted(() => {
+  eventBus.off('carStatusChanged')
+  eventBus.off('carStockChanged')
+  socket.off('carUpdate')
+})
 </script>
 
 <style scoped>

@@ -170,12 +170,12 @@ const handlePageChange = (page) => {
 // 添加缺失的方法和变量
 const brands = ref([])
 const getCarImage = (car) => {
-  if (!car.images) return '/images/default-car.jpg'
+  if (!car.images) return '/images/misc/default-car.png'
   return car.images.split(',')[0]
 }
 
 const handleImageError = (e) => {
-  e.target.src = '/images/default-car.jpg'
+  e.target.src = '/images/misc/default-car.png'
 }
 
 const formatPrice = (price) => {

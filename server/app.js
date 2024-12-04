@@ -15,9 +15,25 @@ const adminRouter = require('./routes/admin');
 const ordersRouter = require('./routes/orders');
 const cartRouter = require('./routes/cart');
 
-
+// 先创建 express app
 const app = express()
 
+// 然后创建 http server
+const http = require('http').createServer(app);
+const io = require('socket.io')(http);
+
+// 设置 socket.io
+app.set('io', io);
+
+io.on('connection', (socket) => {
+  console.log('客户端连接成功');
+  
+  socket.on('disconnect', () => {
+    console.log('客户端断开连接');
+  });
+});
+
+// 其他中间件和路由配置保持不变
 app.use(cors({
   origin: 'http://localhost:5174',
   credentials: true,
@@ -797,7 +813,7 @@ async function startServer() {
   await testDatabaseConnection()
   
   const PORT = 3000
-  app.listen(PORT, () => {
+  http.listen(PORT, () => {
     console.log(`服务器运行在端口 ${PORT}`)
   })
 }

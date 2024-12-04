@@ -28,8 +28,8 @@
       <el-table-column prop="stock" label="库存" width="100" />
       <el-table-column prop="status" label="状态" width="120">
         <template #default="{ row }">
-          <el-tag :type="row.status === 'available' ? 'success' : 'info'">
-            {{ row.status === 'available' ? '有货' : '已下架' }}
+          <el-tag :type="getStatusType(row)">
+            {{ getStatusText(row) }}
           </el-tag>
         </template>
       </el-table-column>
@@ -77,6 +77,7 @@
       width="60%"
       :close-on-click-modal="false"
       :before-close="handleClose"
+      class="car-dialog"
     >
       <el-form 
         ref="formRef"
@@ -202,6 +203,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import axios from 'axios'
 import { useUserStore } from '@/stores/user'
+import { useEventBus } from '@/utils/eventBus'
+
+// 获取 eventBus 实例
+const eventBus = useEventBus()
 
 // 表格数据
 const cars = ref([])
@@ -354,21 +359,21 @@ const handleSubmit = async () => {
     await formRef.value.validate()
     submitting.value = true
 
-    // 确保数值类型正确
     const submitData = {
       ...carForm,
       price: Number(carForm.price),
       year: Number(carForm.year),
       mileage: Number(carForm.mileage),
-      stock: Number(carForm.stock)
+      stock: Number(carForm.stock),
+      status: Number(carForm.stock) === 0 ? 'discontinued' : carForm.status
     }
 
     if (isEdit.value) {
       const response = await axios.put(`/api/admin/cars/${carForm.id}`, submitData)
       ElMessage.success('更新成功')
-      // 如果状态被自动更新，更新本地数据
       if (response.data.status) {
         carForm.status = response.data.status
+        eventBus.emit('carStockChanged')
       }
     } else {
       await axios.post('/api/admin/cars', submitData)
@@ -406,27 +411,60 @@ const beforeUpload = (file) => {
   return isImage
 }
 
-// 获取状态类型
-const getStatusType = (status) => {
-  return status === 'available' ? 'success' : 'info'
+// 修改状态显示逻辑
+const getStatusType = (row) => {
+  if (row.stock === 0) {
+    // 如果库存为0且状态不是已下架，自动更新状态
+    if (row.status !== 'discontinued') {
+      handleAutoDiscontinue(row)
+    }
+    return 'info'
+  }
+  return row.status === 'available' ? 'success' : 'info'
 }
 
-// 获取状态文本
-const getStatusText = (status) => {
-  return status === 'available' ? '有货' : '已下架'
+const getStatusText = (row) => {
+  if (row.stock === 0) {
+    // 如果库存为0且状态不是已下架，自动更新状态
+    if (row.status !== 'discontinued') {
+      handleAutoDiscontinue(row)
+    }
+    return '无货'
+  }
+  return row.status === 'available' ? '有货' : '已下架'
 }
 
-// 处理状态变更
+// 添加自动下架处理方法
+const handleAutoDiscontinue = async (row) => {
+  try {
+    const response = await axios.put(`/api/admin/cars/${row.id}/status`, {
+      status: 'discontinued'
+    })
+    
+    if (response.data.status) {
+      row.status = response.data.status
+    }
+  } catch (error) {
+    console.error('自动下架失败:', error)
+  }
+}
+
+// 修改状态变更方法
 const handleStatusChange = async (row) => {
   try {
+    // 如果库存为0，不允许上架
+    if (row.stock === 0) {
+      return ElMessage.warning('库存为0，无法上架商品')
+    }
+
     const newStatus = row.status === 'discontinued' ? 'available' : 'discontinued'
     const response = await axios.put(`/api/admin/cars/${row.id}/status`, {
       status: newStatus
     })
     
-    // 更新本地状态
     if (response.data.status) {
       row.status = response.data.status
+      eventBus.emit('carStatusChanged')
     }
     
     ElMessage.success(newStatus === 'discontinued' ? '下架成功' : '上架成功')
@@ -512,5 +550,45 @@ onMounted(() => {
 
 .el-form-item {
   margin-bottom: 20px;
+}
+
+:deep(.car-dialog) {
+  .el-dialog__body {
+    max-height: calc(80vh - 120px);
+    overflow-y: auto;
+    padding: 20px;
+  }
+  
+  .el-dialog {
+    margin: 0 auto;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .el-form {
+    .el-form-item {
+      margin-bottom: 18px;
+    }
+    
+    .el-textarea__inner {
+      max-height: 120px;
+    }
+  }
+}
+
+:deep(.el-upload--picture-card) {
+  width: 100px;
+  height: 100px;
+  line-height: 100px;
+}
+
+.el-form-item {
+  .el-select,
+  .el-input,
+  .el-input-number {
+    width: 100%;
+    max-width: 400px;
+  }
 }
 </style> 
