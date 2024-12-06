@@ -20,7 +20,17 @@ const app = express()
 
 // 然后创建 http server
 const http = require('http').createServer(app);
-const io = require('socket.io')(http);
+const io = require('socket.io')(http, {
+  cors: {
+    origin: [
+      'http://localhost:5174',
+      'https://aaa.yaosuchuan.cn',
+      /\.yaosuchuan\.cn$/
+    ],
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
 
 // 设置 socket.io
 app.set('io', io);
@@ -35,7 +45,11 @@ io.on('connection', (socket) => {
 
 // 其他中间件和路由配置保持不变
 app.use(cors({
-  origin: 'http://localhost:5174',
+  origin: [
+    'http://localhost:5174',
+    'https://aaa.yaosuchuan.cn',
+    /\.yaosuchuan\.cn$/
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
@@ -44,9 +58,14 @@ app.use(cors({
     'Cache-Control',
     'Pragma',
     'Expires',
-    'X-Requested-With'
+    'X-Requested-With',
+    'Origin',
+    'Accept',
+    'Access-Control-Request-Method',
+    'Access-Control-Request-Headers'
   ],
-  exposedHeaders: ['Content-Range', 'X-Content-Range']
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 86400
 }))
 
 app.options('*', cors());
@@ -70,24 +89,39 @@ async function testDatabaseConnection() {
 
 // 添加错误处理中件
 app.use((err, req, res, next) => {
-  console.error('服务器错误:', {
-    error: err.message,
+  const errorDetails = {
+    message: err.message,
     stack: err.stack,
     url: req.url,
-    method: req.method
-  });
+    method: req.method,
+    headers: req.headers,
+    body: req.body,
+    timestamp: new Date().toISOString(),
+    ip: req.ip
+  };
   
-  // 根据错误类型返回适当的状态码
+  console.error('服务器错误:', errorDetails);
+  
+  // 根据错误类型返回适当的状态码和信息
   if (err.name === 'ValidationError') {
     return res.status(400).json({
       message: '请求参数错误',
-      errors: err.errors
+      errors: err.errors,
+      details: process.env.NODE_ENV === 'development' ? errorDetails : undefined
+    });
+  }
+  
+  if (err.name === 'MulterError') {
+    return res.status(400).json({
+      message: '文件上传错误',
+      error: err.message,
+      details: process.env.NODE_ENV === 'development' ? errorDetails : undefined
     });
   }
   
   res.status(500).json({
     message: '服务器内部错误',
-    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    error: process.env.NODE_ENV === 'development' ? errorDetails : '服务器处理请求时发生错误'
   });
 });
 
@@ -125,6 +159,28 @@ const upload = multer({
   }
 }).single('avatar')
 
+// 包装 upload 中间件以处理错误
+const uploadMiddleware = (req, res, next) => {
+  upload(req, res, function(err) {
+    if (err instanceof multer.MulterError) {
+      console.error('Multer错误:', err);
+      return res.status(400).json({
+        message: '文件上传错误',
+        error: err.message,
+        code: 'UPLOAD_ERROR'
+      });
+    } else if (err) {
+      console.error('其他上传错误:', err);
+      return res.status(500).json({
+        message: '文件上传失败',
+        error: err.message,
+        code: 'UPLOAD_FAILED'
+      });
+    }
+    next();
+  });
+};
+
 // 确保上传目录存在
 const uploadDir = path.join(__dirname, '../public/uploads/avatars')
 if (!fs.existsSync(uploadDir)) {
@@ -133,7 +189,7 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 // 用户注册
-app.post('/api/auth/register', upload, async (req, res) => {
+app.post('/api/auth/register', uploadMiddleware, async (req, res) => {
   const connection = await pool.getConnection()
   try {
     console.log('注册请求体:', req.body)
@@ -765,6 +821,7 @@ function ensureUploadDirs() {
     if (!fs.existsSync(dir)) {
       try {
         fs.mkdirSync(dir, { recursive: true })
+        fs.chmodSync(dir, '755')
         console.log(`创建目录成功: ${dir}`)
       } catch (error) {
         console.error(`创建目录失败: ${dir}`, error)
@@ -798,23 +855,72 @@ app.use((req, res, next) => {
   next();
 });
 
-// 添加请求日志中间件
+// 修改请求日志中间件，增加更详细的信息
 app.use((req, res, next) => {
   console.log('收到请求:', {
     method: req.method,
     url: req.url,
-    headers: req.headers
+    headers: req.headers,
+    body: req.method === 'POST' ? req.body : undefined,
+    query: req.query,
+    ip: req.ip,
+    originalUrl: req.originalUrl
   });
+  
+  // 添���响应日志
+  const oldWrite = res.write;
+  const oldEnd = res.end;
+
+  const chunks = [];
+
+  res.write = function (chunk) {
+    if (chunk) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return oldWrite.apply(res, arguments);
+  };
+
+  res.end = function (chunk) {
+    if (chunk) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    
+    let body;
+    try {
+      // 尝试将响应体转换为字符串
+      if (chunks.length > 0) {
+        const buffer = Buffer.concat(chunks);
+        body = buffer.toString('utf8');
+        // 尝试解析 JSON
+        try {
+          body = JSON.parse(body);
+        } catch (e) {
+          // 如果不是 JSON 则保持原样
+        }
+      }
+    } catch (error) {
+      body = '<无法读取响应体>';
+    }
+
+    console.log('响应信息:', {
+      statusCode: res.statusCode,
+      headers: res.getHeaders(),
+      body: body
+    });
+    
+    oldEnd.apply(res, arguments);
+  };
+
   next();
 });
 
-// 启动服务器
+// 修改服务器启动函数
 async function startServer() {
   await testDatabaseConnection()
   
   const PORT = 3000
   http.listen(PORT, () => {
-    console.log(`服务器运行在端口 ${PORT}`)
+    console.log(`HTTP 服务器运行在端口 ${PORT}`)
   })
 }
 

@@ -60,12 +60,50 @@
       <h3>用户评论</h3>
       
       <div class="comment-form" v-if="userStore.isLoggedIn">
-        <el-input
-          v-model="newComment"
-          type="textarea"
-          :rows="3"
-          placeholder="写下您的评论..."
-        />
+        <div class="comment-input-wrapper">
+          <el-input
+            v-model="newComment"
+            type="textarea"
+            :rows="3"
+            placeholder="写下您的评论..."
+          />
+          <div class="emoji-picker">
+            <el-popover
+              placement="bottom"
+              trigger="click"
+              width="300"
+            >
+              <template #reference>
+                <el-button type="text">
+                  <i class="el-icon-emoji">😊</i>
+                </el-button>
+              </template>
+              <div class="emoji-container">
+                <div class="emoji-tabs">
+                  <span 
+                    v-for="(category, index) in emojiCategories" 
+                    :key="index"
+                    class="emoji-tab"
+                    :class="{ active: currentEmojiTab === index }"
+                    @click="currentEmojiTab = index"
+                  >
+                    {{ category.icon }}
+                  </span>
+                </div>
+                <div class="emoji-list">
+                  <span 
+                    v-for="emoji in currentEmojis" 
+                    :key="emoji"
+                    class="emoji-item"
+                    @click="insertEmoji(emoji)"
+                  >
+                    {{ emoji }}
+                  </span>
+                </div>
+              </div>
+            </el-popover>
+          </div>
+        </div>
         <el-button 
           type="primary" 
           @click="submitComment"
@@ -112,14 +150,52 @@
           </div>
           
           <div v-if="comment.showReplyInput" class="reply-form">
-            <el-input
-              v-model="comment.replyContent"
-              type="textarea"
-              :rows="2"
-              placeholder="写下您的回复..."
-            />
+            <div class="reply-input-wrapper">
+              <el-input
+                v-model="comment.replyContent"
+                type="textarea"
+                :rows="2"
+                placeholder="写下您的回复..."
+              />
+              <div class="emoji-picker">
+                <el-popover
+                  placement="bottom"
+                  trigger="click"
+                  width="300"
+                >
+                  <template #reference>
+                    <el-button type="text">
+                      <i class="el-icon-emoji">😊</i>
+                    </el-button>
+                  </template>
+                  <div class="emoji-container">
+                    <div class="emoji-tabs">
+                      <span 
+                        v-for="(category, index) in emojiCategories" 
+                        :key="index"
+                        class="emoji-tab"
+                        :class="{ active: currentEmojiTab === index }"
+                        @click="currentEmojiTab = index"
+                      >
+                        {{ category.icon }}
+                      </span>
+                    </div>
+                    <div class="emoji-list">
+                      <span 
+                        v-for="emoji in currentEmojis" 
+                        :key="emoji"
+                        class="emoji-item"
+                        @click="insertReplyEmoji(comment, emoji)"
+                      >
+                        {{ emoji }}
+                      </span>
+                    </div>
+                  </div>
+                </el-popover>
+              </div>
+            </div>
             <div class="reply-actions">
-              <el-button size="small" @click="comment.showReplyInput = false">取消</el-button>
+              <el-button size="small" @click="cancelReply(comment)">取消</el-button>
               <el-button 
                 type="primary" 
                 size="small" 
@@ -279,6 +355,7 @@ const showReplyInput = (comment) => {
   }
   comment.showReplyInput = true
   comment.replyContent = ''
+  checkReplyDraft(comment)
 }
 
 const submitReply = async (comment) => {
@@ -289,19 +366,87 @@ const submitReply = async (comment) => {
 
   comment.submittingReply = true
   try {
-    await axios.post(`/api/comments/${comment.id}/reply`, {
+    const response = await axios.post(`/api/comments/${comment.id}/reply`, {
       content: comment.replyContent.trim()
+    }, {
+      timeout: 10000,
+      retry: 3,
+      retryDelay: 1000
     })
     
-    comment.showReplyInput = false
-    await fetchComments()
-    ElMessage.success('回复成功')
+    if (response.data) {
+      comment.showReplyInput = false
+      await fetchComments()
+      ElMessage.success('回复成功')
+    } else {
+      throw new Error('回复失败：服务器返回异常')
+    }
   } catch (error) {
     console.error('回复失败:', error)
-    ElMessage.error('回复失败，请重试')
+    
+    if (error.code === 'ECONNABORTED') {
+      ElMessage.error('网络请求超时，请稍后重试')
+    } else if (error.response) {
+      switch (error.response.status) {
+        case 401:
+          ElMessage.error('请先登录后再回复')
+          router.push('/login')
+          break
+        case 403:
+          ElMessage.error('您没有回复权限')
+          break
+        case 404:
+          ElMessage.error('评论不存在或已被删除')
+          break
+        case 500:
+          ElMessage.error('服务器错误，请稍后重试')
+          break
+        default:
+          ElMessage.error(error.response.data?.message || '回复失败，请重试')
+      }
+    } else if (error.request) {
+      ElMessage.error('网络连接失败，请检查网络后重试')
+    } else {
+      ElMessage.error('回复失败：' + error.message)
+    }
+
+    if (error.code === 'ERR_NETWORK') {
+      try {
+        localStorage.setItem(`reply_draft_${comment.id}`, comment.replyContent)
+        ElMessage.info('已保存回复草稿')
+      } catch (e) {
+        console.error('保存草稿失败:', e)
+      }
+    }
   } finally {
     comment.submittingReply = false
   }
+}
+
+const checkReplyDraft = (comment) => {
+  try {
+    const draft = localStorage.getItem(`reply_draft_${comment.id}`)
+    if (draft) {
+      comment.replyContent = draft
+      ElMessage.info('已恢复未发送的回复草稿')
+      localStorage.removeItem(`reply_draft_${comment.id}`)
+    }
+  } catch (e) {
+    console.error('获取草稿失败:', e)
+  }
+}
+
+const cancelReply = (comment) => {
+  if (comment.replyContent?.trim()) {
+    try {
+      localStorage.setItem(`reply_draft_${comment.id}`, comment.replyContent)
+      ElMessage.info('已保存回复草稿')
+    } catch (e) {
+      console.error('保存草稿失败:', e)
+    }
+  }
+  comment.showReplyInput = false
+  comment.replyContent = ''
 }
 
 onMounted(() => {
@@ -356,6 +501,75 @@ const getStatusText = (status) => {
 
 const openCustomerService = () => {
   eventBus.emit('open-customer-service')
+}
+
+// 添加表情分类
+const currentEmojiTab = ref(0)
+
+const emojiCategories = [
+  {
+    icon: '😊',
+    emojis: [
+      '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣',
+      '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰',
+      '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜',
+      '🤪', '🤨', '🧐', '🤓', '😎', '🤩', '🥳', '😏'
+    ]
+  },
+  {
+    icon: '👋',
+    emojis: [
+      '👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏',
+      '✌️', '🤞', '🫰', '🤟', '🤘', '🤙', '👈', '👉',
+      '👆', '🖕', '👇', '☝️', '👍', '👎', '✊', '👊',
+      '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏'
+    ]
+  },
+  {
+    icon: '❤️',
+    emojis: [
+      '❤️', '🧡', '💛', '💚', '💙', '💜', '🤎', '🖤',
+      '🤍', '💔', '❤️‍🔥', '❤️‍🩹', '💘', '💝', '💖', '💗',
+      '💓', '💞', '💕', '💌', '💟', '❣️', '💋', '💯',
+      '💢', '💥', '💫', '💦', '💨', '🕳️', '💣', '💬'
+    ]
+  },
+  {
+    icon: '🌟',
+    emojis: [
+      '⭐', '🌟', '✨', '💫', '☄️', '🌙', '🌎', '🌍',
+      '🌏', '🪐', '💫', '⚡', '☀️', '🌤️', '⛅', '🌥️',
+      '☁️', '🌦️', '🌧️', '⛈️', '🌩️', '🌨️', '❄️', '☃️',
+      '⛄', '🌬️', '💨', '🌪️', '🌫️', '🌈', '☔', '⚡'
+    ]
+  },
+  {
+    icon: '🐱',
+    emojis: [
+      '🐱', '🐈', '🦁', '🐯', '🐅', '🐆', '🐕', '🐶',
+      '🐩', '🐺', '🦊', '🦝', '🐮', '🐷', '🐗', '🐭',
+      '🐹', '🐰', '🐻', '🐨', '🐼', '🦘', '🦡', '🐾',
+      '🦃', '🐔', '🐓', '🐣', '🐤', '🐥', '🐦', '🐧'
+    ]
+  }
+]
+
+// 计算当前显示的表情
+const currentEmojis = computed(() => {
+  return emojiCategories[currentEmojiTab.value].emojis
+})
+
+// 添加插入表情的方法
+const insertEmoji = (emoji) => {
+  newComment.value += emoji
+}
+
+// 添加插入回复表情的方法
+const insertReplyEmoji = (comment, emoji) => {
+  if (!comment.replyContent) {
+    comment.replyContent = ''
+  }
+  comment.replyContent += emoji
 }
 </script>
 
@@ -560,5 +774,72 @@ h3 {
 /* 可选：添加鼠标悬停效果 */
 .like-button:hover span {
   color: #ff4757;
+}
+
+/* 修改表情相关样式 */
+.emoji-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px;
+}
+
+.emoji-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 4px;
+  border-bottom: 1px solid #eee;
+}
+
+.emoji-tab {
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.3s;
+}
+
+.emoji-tab:hover {
+  background: #f5f7fa;
+}
+
+.emoji-tab.active {
+  background: #ecf5ff;
+  color: #409EFF;
+}
+
+.emoji-list {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.emoji-item {
+  cursor: pointer;
+  font-size: 20px;
+  text-align: center;
+  transition: transform 0.2s;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.emoji-item:hover {
+  transform: scale(1.2);
+  background: #f5f7fa;
+}
+
+/* 添加滚动条样式 */
+.emoji-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.emoji-list::-webkit-scrollbar-thumb {
+  background: #dcdfe6;
+  border-radius: 3px;
+}
+
+.emoji-list::-webkit-scrollbar-track {
+  background: #f5f7fa;
 }
 </style> 

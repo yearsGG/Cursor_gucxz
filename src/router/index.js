@@ -79,13 +79,22 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore()
   
+  if (to.path === '/login' && userStore.isLoggedIn) {
+    next('/')
+    return
+  }
+  
   if (to.meta.requiresAuth && !userStore.isLoggedIn) {
     next('/login')
-  } else if (to.meta.requiresAdmin && userStore.userRole !== 'admin') {
-    next('/')
-  } else {
-    next()
+    return
   }
+  
+  if (to.meta.requiresAdmin && userStore.userRole !== 'admin') {
+    next('/')
+    return
+  }
+  
+  next()
 })
 
 export default router 

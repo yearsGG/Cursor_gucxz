@@ -1,32 +1,46 @@
 import { defineStore } from 'pinia'
+import { ref } from 'vue'
 
-export const useUserStore = defineStore('user', {
-  state: () => ({
-    token: localStorage.getItem('token') || '',
-    user: JSON.parse(localStorage.getItem('user') || 'null')
-  }),
+export const useUserStore = defineStore('user', () => {
+  const token = ref('')
+  const user = ref(null)
+  const isLoggedIn = ref(false)
+  const userRole = ref('')
 
-  getters: {
-    isLoggedIn: (state) => !!state.token,
-    userRole: (state) => state.user?.role || 'guest'
-  },
+  // 设置 token
+  const setToken = (newToken) => {
+    token.value = newToken
+  }
 
-  actions: {
-    setToken(token) {
-      this.token = token
-      localStorage.setItem('token', token)
-    },
+  // 设置用户信息
+  const setUser = (userData) => {
+    user.value = userData
+    userRole.value = userData?.role || ''
+    isLoggedIn.value = true
+  }
 
-    setUser(user) {
-      this.user = user
-      localStorage.setItem('user', JSON.stringify(user))
-    },
+  // 登录方法
+  const login = (userData, userToken) => {
+    setUser(userData)
+    setToken(userToken)
+  }
 
-    logout() {
-      this.token = ''
-      this.user = null
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-    }
+  // 退出登录方法
+  const logout = () => {
+    token.value = ''
+    user.value = null
+    isLoggedIn.value = false
+    userRole.value = ''
+  }
+
+  return {
+    token,
+    user,
+    isLoggedIn,
+    userRole,
+    setToken,
+    setUser,
+    login,
+    logout
   }
 }) 

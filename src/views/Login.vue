@@ -73,52 +73,25 @@ const handleLogin = async () => {
     await formRef.value.validate()
     loading.value = true
     
-    const response = await axios.post('/api/auth/login', {
+    const { data } = await axios.post('/api/auth/login', {
       username: formData.value.username,
       password: formData.value.password
     })
-
-    const { token, user } = response.data
     
-    // 打印详细的登录信息
-    console.log('登录响应:', response.data)
-    console.log('用户信息:', user)
-    console.log('用户角色:', user.role)
+    userStore.login(data.user, data.token)
     
-    // 保存token和用户信息
-    userStore.setToken(token)
-    userStore.setUser(user)
-    
-    // 设置axios默认header
-    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
-    
-    // 打印store中的用户角色
-    console.log('Store中的用户角色:', userStore.userRole)
+    axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`
     
     ElMessage.success('登录成功')
-
-    // 根据角色跳转
-    if (userStore.userRole === 'admin') {
-      console.log('准备跳转到管理后台')
-      await router.push({
-        name: 'AdminDashboard',
-        replace: true
-      })
+    
+    if (data.user.role === 'admin') {
+      await router.push('/admin')
     } else {
-      console.log('准备跳转到首页')
-      await router.push({
-        path: '/',
-        replace: true
-      })
+      await router.push('/')
     }
-
   } catch (error) {
     console.error('登录错误:', error)
-    if (error.response?.status === 401) {
-      ElMessage.error('用户名或密码错误')
-    } else {
-      ElMessage.error('登录失败，请稍后重试')
-    }
+    ElMessage.error(error.response?.data?.message || '登录失败')
   } finally {
     loading.value = false
   }

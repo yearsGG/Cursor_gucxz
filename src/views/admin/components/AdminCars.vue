@@ -276,9 +276,13 @@ const fetchCars = async () => {
         pageSize: pageSize.value
       }
     })
-    cars.value = response.data.items
-    total.value = response.data.total
+    
+    if (response.data) {
+      cars.value = response.data.items
+      total.value = response.data.total
+    }
   } catch (error) {
+    console.error('获取车辆列表失败:', error)
     ElMessage.error('获取车辆列表失败')
   }
 }
@@ -414,63 +418,78 @@ const beforeUpload = (file) => {
 // 修改状态显示逻辑
 const getStatusType = (row) => {
   if (row.stock === 0) {
-    // 如果库存为0且状态不是已下架，自动更新状态
-    if (row.status !== 'discontinued') {
-      handleAutoDiscontinue(row)
-    }
-    return 'info'
+    return 'info';  // 无货显示灰色
   }
-  return row.status === 'available' ? 'success' : 'info'
+  return row.status === 'available' ? 'success' : 'warning';
 }
 
 const getStatusText = (row) => {
   if (row.stock === 0) {
-    // 如果库存为0且状态不是已下架，自动更新状态
-    if (row.status !== 'discontinued') {
-      handleAutoDiscontinue(row)
-    }
-    return '无货'
+    return '无货';
   }
-  return row.status === 'available' ? '有货' : '已下架'
-}
-
-// 添加自动下架处理方法
-const handleAutoDiscontinue = async (row) => {
-  try {
-    const response = await axios.put(`/api/admin/cars/${row.id}/status`, {
-      status: 'discontinued'
-    })
-    
-    if (response.data.status) {
-      row.status = response.data.status
-    }
-  } catch (error) {
-    console.error('自动下架失败:', error)
-  }
+  return row.status === 'available' ? '有货' : '补货中';
 }
 
 // 修改状态变更方法
 const handleStatusChange = async (row) => {
   try {
-    // 如果库存为0，不允许上架
-    if (row.stock === 0) {
-      return ElMessage.warning('库存为0，无法上架商品')
+    // 如果是上架操作，检查库存
+    if (row.status === 'discontinued') {
+      if (row.stock === 0) {
+        return ElMessage.warning('库存为0，无法上架商品');
+      }
+
+      if (row.stock < 1) {
+        return ElMessage.warning('库存不足，无法上架商品');
+      }
     }
 
-    const newStatus = row.status === 'discontinued' ? 'available' : 'discontinued'
+    // 切换状态
+    const newStatus = row.status === 'available' ? 'discontinued' : 'available';
+
     const response = await axios.put(`/api/admin/cars/${row.id}/status`, {
       status: newStatus
-    })
+    });
     
-    if (response.data.status) {
-      row.status = response.data.status
-      eventBus.emit('carStatusChanged')
+    // 检查响应数据
+    if (response.data && response.data.status) {
+      // 使用后端返回的状态更新本地状态
+      row.status = response.data.status;
+      ElMessage({
+        type: 'success',
+        message: newStatus === 'available' ? '上架成功' : '下架成功'
+      });
+      eventBus.emit('carStatusChanged');
+    } else {
+      ElMessage({
+        type: 'error',
+        message: response.data?.message || '操作失败'
+      });
     }
-    
-    ElMessage.success(newStatus === 'discontinued' ? '下架成功' : '上架成功')
   } catch (error) {
-    console.error('更新状态失败:', error)
-    ElMessage.error(error.response?.data?.message || '操作失败')
+    console.error('更新状态失败:', error);
+    ElMessage({
+      type: 'error',
+      message: error.response?.data?.message || '操作失败'
+    });
+  }
+}
+
+// 修改库存更新方法
+const handleStockChange = async (row) => {
+  try {
+    const response = await axios.put(`/api/admin/cars/${row.id}/stock`, {
+      stock: row.stock
+    });
+    
+    if (response.data.success) {
+      row.status = response.data.status;
+      ElMessage.success('库存更新成功');
+      eventBus.emit('carStockChanged');
+    }
+  } catch (error) {
+    console.error('更新库存失败:', error);
+    ElMessage.error(error.response?.data?.message || '更新失败');
   }
 }
 

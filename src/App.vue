@@ -37,15 +37,15 @@
           </router-link>
           
           <!-- 用户菜单 -->
-          <template v-if="userStore.isLoggedIn">
+          <template v-if="isLoggedIn">
             <el-dropdown trigger="click">
               <span class="user-menu">
                 <el-avatar 
                   :size="32"
-                  :src="userStore.user?.avatar || '/images/default-avatar.png'"
+                  :src="user?.avatar || '/images/default-avatar.png'"
                   @error="handleAvatarError"
                 />
-                <span class="username">{{ userStore.user?.username }}</span>
+                <span class="username">{{ user?.username }}</span>
                 <el-icon><ArrowDown /></el-icon>
               </span>
               <template #dropdown>
@@ -60,10 +60,10 @@
                     <el-icon><List /></el-icon>
                     我的订单
                   </el-dropdown-item>
-                  <el-dropdown-item v-if="userStore.userRole === 'admin'">
+                  <el-dropdown-item v-if="userRole === 'admin'">
                     <router-link to="/admin" class="dropdown-link">
                       <el-icon><Setting /></el-icon>
-                      管理后
+                      管理后台
                     </router-link>
                   </el-dropdown-item>
                   <el-dropdown-item divided @click="logout">
@@ -147,7 +147,8 @@
 
 <script setup>
 import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import { useUserStore } from '@/stores/user'
 import { 
   Search, 
@@ -169,57 +170,17 @@ import axios from 'axios'
 import CustomerService from '@/components/CustomerService.vue'
 import eventBus from '@/utils/eventBus'
 
-// 初始化路由和状态管理
+// 确保在使用 store 之前已经初始化
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 
-// 搜索相关
-const searchQuery = ref('')
-const cartCount = ref(0)
+// 使用 storeToRefs 来保持响应性
+const { user, isLoggedIn, userRole } = storeToRefs(userStore)
 
-// 控制客服对话框显示
-const showCustomerService = ref(false)
-
-// 监听打开客服对话框事件
-onMounted(() => {
-  eventBus.on('open-customer-service', () => {
-    showCustomerService.value = true
-  })
-})
-
-// 组件卸载时移除事件监听
-onUnmounted(() => {
-  eventBus.off('open-customer-service')
-})
-
-// 处理对话框关闭
-const handleCloseDialog = () => {
-  showCustomerService.value = false
-}
-
-// 处理搜索
-const handleSearch = () => {
-  if (!searchQuery.value.trim()) {
-    ElMessage.warning('请输入搜索关键词')
-    return
-  }
-  // 跳转到搜索结果页面
-  router.push({
-    path: '/search',
-    query: { q: searchQuery.value }
-  })
-}
-
-// 退出登录
-const logout = () => {
-  userStore.logout()
-  ElMessage.success('已退出登录')
-  router.push('/login')
-}
-
-// 获取购物车数量
+// 3. 修改 watch 和其他使用 store 的地方
 const fetchCartCount = async () => {
-  if (!userStore.isLoggedIn) {
+  if (!isLoggedIn.value) {  // 使用解构后的响应式引用
     cartCount.value = 0
     return
   }
@@ -237,8 +198,8 @@ const fetchCartCount = async () => {
   }
 }
 
-// 监听登录状态变化
-watch(() => userStore.isLoggedIn, (newVal) => {
+// 修改 watch 使用解构后的响应式引用
+watch(isLoggedIn, (newVal) => {
   if (newVal) {
     fetchCartCount()
   } else {
@@ -246,17 +207,52 @@ watch(() => userStore.isLoggedIn, (newVal) => {
   }
 })
 
-// 在 onMounted 中调用
+// 修改 onMounted 使用解构后的响应式引用
 onMounted(() => {
-  if (userStore.isLoggedIn) {
+  if (isLoggedIn.value) {
     fetchCartCount()
   }
+  
+  eventBus.on('open-customer-service', () => {
+    showCustomerService.value = true
+  })
 })
 
+// 其他变量声明
+const searchQuery = ref('')
+const cartCount = ref(0)
+const showCustomerService = ref(false)
+
+// 其他方法
+const handleCloseDialog = () => {
+  showCustomerService.value = false
+}
+
+const handleSearch = () => {
+  if (!searchQuery.value.trim()) {
+    ElMessage.warning('请输入搜索关键词')
+    return
+  }
+  router.push({
+    path: '/search',
+    query: { q: searchQuery.value }
+  })
+}
+
+const logout = () => {
+  userStore.logout()
+  ElMessage.success('已退出登录')
+  router.push('/login')
+}
+
 const handleAvatarError = (e) => {
-  console.error('头像加载失败:', userStore.user?.avatar)
+  console.error('头像加载失败:', user.value?.avatar)  // 使用解构后的响应式引用
   e.target.src = '/images/default-avatar.png'
 }
+
+onUnmounted(() => {
+  eventBus.off('open-customer-service')
+})
 </script>
 
 <style scoped>
